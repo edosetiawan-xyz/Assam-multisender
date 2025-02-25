@@ -1,21 +1,23 @@
-MIT License
+Lisensi MIT
 
-Copyright (c) 2025 EDO SETIAWAN
+Hak Cipta (c) 2024 edosetiawan.eth
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Dengan ini diberikan izin, tanpa biaya, kepada siapa pun yang memperoleh salinan perangkat lunak ini dan dokumentasi terkait (selanjutnya disebut sebagai "Perangkat Lunak"), untuk menggunakan Perangkat Lunak tanpa batasan, termasuk namun tidak terbatas pada hak untuk menggunakan, menyalin, memodifikasi, menggabungkan, menerbitkan, mendistribusikan, mensublisensikan, dan/atau menjual salinan Perangkat Lunak, serta mengizinkan pihak yang menerima Perangkat Lunak untuk melakukan hal yang sama, dengan ketentuan sebagai berikut:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. **Pernyataan Hak Cipta**  
+   Setiap salinan atau bagian substansial dari Perangkat Lunak ini harus mencantumkan pernyataan hak cipta di atas serta pemberitahuan izin ini.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. **Penyediaan "Sebagaimana Adanya"**  
+   PERANGKAT LUNAK INI DISEDIAKAN "SEBAGAIMANA ADANYA", TANPA JAMINAN APA PUN, BAIK YANG TERSURAT MAUPUN TERSIRAT, TERMASUK NAMUN TIDAK TERBATAS PADA JAMINAN KELAYAKAN UNTUK DIPERJUALBELIKAN, KESESUAIAN UNTUK TUJUAN TERTENTU, DAN NON-PELANGGARAN.
+
+3. **Batasan Tanggung Jawab**  
+   DALAM KEADAAN APA PUN, PENULIS ATAU PEMEGANG HAK CIPTA TIDAK BERTANGGUNG JAWAB ATAS KLAIM, KERUSAKAN, ATAU KEWAJIBAN LAINNYA, BAIK DALAM KONTRAK, PERBUATAN MELAWAN HUKUM, ATAU LAINNYA, YANG TIMBUL DARI ATAU TERKAIT DENGAN PERANGKAT LUNAK ATAU PENGGUNAAN ATAU TRANSAKSI LAIN DALAM PERANGKAT LUNAK.
+
+4. **Kepatuhan Hukum**  
+   Penerima Perangkat Lunak bertanggung jawab penuh atas kepatuhan terhadap hukum dan regulasi yang berlaku dalam yurisdiksi masing-masing terkait dengan penggunaan, distribusi, atau modifikasi Perangkat Lunak ini.
+
+---
+
+📌 **Catatan:**  
+- Lisensi ini **tidak membatasi siapa pun untuk menggunakan atau mendistribusikan kode ini**, tetapi tetap memberikan **perlindungan hukum kepada pengembang asli**.  
+- Cocok untuk proyek open-source, startup, dan proyek Web3/blockchain yang ingin tetap fleksibel tetapi terlindungi.
