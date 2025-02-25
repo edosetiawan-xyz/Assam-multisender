@@ -17,3 +17,4 @@ Jika Anda menemukan pelanggaran terhadap kode etik ini, silakan hubungi kami mel
 📧 **edosetiawan.eth@gmail.com**  
 
 Terima kasih telah berkontribusi dengan etika yang baik! 🎉
+

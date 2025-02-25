@@ -11,3 +11,4 @@ Kami sangat peduli dengan keamanan proyek ini. Jika Anda menemukan celah keamana
 4. Kami akan berusaha merespons dalam **24-48 jam**.
 
 Terima kasih atas kontribusi Anda dalam menjaga keamanan proyek ini! 🚀
+
