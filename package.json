@@ -1,19 +1,21 @@
 {
   "name": "assam-multisender",
-  "version": "5.1.2",
+  "version": "5.1.3",
   "description": "🚀 Multisender script for Assam Tea Testnet - Secure, Fast, and Reliable!",
   "type": "module",
-  "main": "Assam-multisender.js",
+  "main": "assam-multisender.js",
   "scripts": {
-    "start": "node Assam-multisender.js",
-    "start:nodemon": "nodemon Assam-multisender.js",
-    "start:pm2": "pm2 start Assam-multisender.js --name assam-multisender",
+    "start": "node assam-multisender.js",
+    "start:nodemon": "nodemon assam-multisender.js",
+    "start:pm2": "pm2 start assam-multisender.js --name assam-multisender",
+    "start:debug": "node --inspect-brk assam-multisender.js",
     "test": "echo \"No test specified\" && exit 1",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "update": "git pull origin main && npm install",
+    "update": "git stash && git pull origin main && git stash pop && npm install",
     "logs": "pm2 logs assam-multisender",
-    "stop:pm2": "pm2 stop assam-multisender && pm2 delete assam-multisender"
+    "stop:pm2": "pm2 stop assam-multisender && pm2 delete assam-multisender",
+    "audit": "npm audit"
   },
   "keywords": [
     "Assam Tea",
@@ -29,24 +31,28 @@
     "Gas Optimization",
     "edosetiawan.eth"
   ],
-  "author": "💡 edosetiawan.eth",
+  "author": {
+    "name": "edosetiawan.eth",
+    "email": "your-email@example.com",
+    "url": "https://yourwebsite.com"
+  },
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.3.5",
-    "chalk": "^4.1.2",
-    "dotenv": "^16.0.3",
-    "eslint": "^8.35.0",
-    "ethers": "^6.7.0",
-    "pm2": "^5.3.0",
-    "prettier": "^2.8.8",
+    "axios": "^1.6.0",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.4.0",
+    "eslint": "^8.48.0",
+    "ethers": "^6.10.0",
+    "pm2": "^5.3.2",
+    "prettier": "^3.2.0",
     "readline-sync": "^1.4.10",
-    "winston": "^3.8.2"
+    "winston": "^3.11.0"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "nodemon": "^3.1.9"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   }
 }
