@@ -3,12 +3,12 @@
   "version": "5.1.3",
   "description": "🚀 Multisender script for Assam Tea Testnet - Secure, Fast, and Reliable!",
   "type": "module",
-  "main": "assam-multisender.js",
+  "main": "Assam-multisender.js",
   "scripts": {
-    "start": "node assam-multisender.js",
-    "start:nodemon": "nodemon assam-multisender.js",
-    "start:pm2": "pm2 start assam-multisender.js --name assam-multisender",
-    "start:debug": "node --inspect-brk assam-multisender.js",
+    "start": "node Assam-multisender.js",
+    "start:nodemon": "nodemon Assam-multisender.js",
+    "start:pm2": "pm2 start Assam-multisender.js --name assam-multisender",
+    "start:debug": "node --inspect-brk Assam-multisender.js",
     "test": "echo \"No test specified\" && exit 1",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -33,8 +33,8 @@
   ],
   "author": {
     "name": "edosetiawan.eth",
-    "email": "your-email@example.com",
-    "url": "https://yourwebsite.com"
+    "email": "edosetiawan.eth@gmail.com",
+    "url": "https://bangedosetiawan.blogspot.com"
   },
   "license": "MIT",
   "dependencies": {
