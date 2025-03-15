@@ -10,9 +10,15 @@ on:
   release:
     types:
       - created
+  fork:
   watch:
     types:
-      - started  # Notifikasi jika ada yang memberi bintang (star) di repo
+      - started
+  issues:
+    types:
+      - opened
+      - closed
+  workflow_dispatch:
 
 env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
@@ -38,7 +44,6 @@ jobs:
       - name: Ensure ESLint Config Exists
         run: |
           if [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
-            echo "ESLint config not found! Creating a default one..."
             echo "module.exports = { 'env': { 'node': true }, 'extends': 'eslint:recommended' };" > .eslintrc.js
           fi
 
@@ -59,17 +64,19 @@ jobs:
       - name: Notify Telegram on Build Failure
         if: failure()
         run: |
-          ERROR_LOG=$(tail -n 20 test_output.log 2>/dev/null || echo "No log available")
+          ERROR_LOG=$(tail -n 10 test_output.log 2>/dev/null || echo "No log available")
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🚨 Build Failed!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}\nError Log:\n$ERROR_LOG"
+          -d parse_mode=Markdown \
+          -d text="🚨 *Build Failed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n\n🛑 *Error Log:*\n\`\`\`\n$ERROR_LOG\n\`\`\`"
 
       - name: Notify Telegram on Success
         if: success()
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="✅ Build Succeeded!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}"
+          -d parse_mode=Markdown \
+          -d text="✅ *Build Succeeded!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
   notify_pr:
     runs-on: ubuntu-latest
@@ -79,7 +86,8 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="📢 New Pull Request!\nRepository: ${{ github.repository }}\nPR Title: ${{ github.event.pull_request.title }}\nPR Link: ${{ github.event.pull_request.html_url }}"
+          -d parse_mode=Markdown \
+          -d text="📢 *New Pull Request!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
 
   notify_merge:
     runs-on: ubuntu-latest
@@ -89,17 +97,19 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🔄 PR Merged!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}"
+          -d parse_mode=Markdown \
+          -d text="🔄 *PR Merged!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
-  notify_release:
+  notify_issue:
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
     steps:
-      - name: Notify Telegram on Release
+      - name: Notify Telegram on New Issue
+        if: github.event_name == 'issues'
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🚀 New Release!\nRepository: ${{ github.repository }}\nRelease: ${{ github.event.release.html_url }}"
+          -d parse_mode=Markdown \
+          -d text="📝 *New Issue Created!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
 
   notify_fork:
     runs-on: ubuntu-latest
@@ -108,7 +118,8 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🍴 Repository Forked!\nRepository: ${{ github.repository }}"
+          -d parse_mode=Markdown \
+          -d text="🍴 *Repository Forked!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
   notify_star:
     runs-on: ubuntu-latest
@@ -117,4 +128,5 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="⭐ Repository Starred!\nRepository: ${{ github.repository }}\nBy: ${{ github.actor }}"
+          -d parse_mode=Markdown \
+          -d text="⭐ *Repository Starred!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
