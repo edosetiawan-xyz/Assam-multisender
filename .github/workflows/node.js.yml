@@ -10,11 +10,9 @@ on:
   release:
     types:
       - created
-  schedule:
-    - cron: "0 0 * * *"  # Jalankan setiap hari untuk memastikan workflow tetap aktif
   watch:
     types:
-      - started  # Notifikasi jika ada yang memberi bintang (Star)
+      - started  # Notifikasi jika ada yang memberi bintang (star) di repo
 
 env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
@@ -25,32 +23,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🚀 Checkout Repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: ⚙️ Set up Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm install
 
-      - name: 🔎 Ensure ESLint Config Exists
+      - name: Ensure ESLint Config Exists
         run: |
           if [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
             echo "ESLint config not found! Creating a default one..."
             echo "module.exports = { 'env': { 'node': true }, 'extends': 'eslint:recommended' };" > .eslintrc.js
           fi
 
-      - name: 🛠 Run ESLint
+      - name: Run ESLint
         run: npm run lint --if-present || echo "Linting failed!" > lint_error.log
 
-      - name: 🧪 Run Tests
+      - name: Run Tests
         run: npm test || echo "Tests failed!" > test_output.log
 
-      - name: 📝 Save Logs for Debugging
+      - name: Save Logs for Debugging
         if: failure()
         run: |
           echo "Lint Errors:"
@@ -58,107 +56,65 @@ jobs:
           echo "Test Output:"
           cat test_output.log || echo "No test output"
 
-      - name: ❌ Notify Telegram on Build Failure
+      - name: Notify Telegram on Build Failure
         if: failure()
         run: |
           ERROR_LOG=$(tail -n 20 test_output.log 2>/dev/null || echo "No log available")
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🚨 *Build Failed!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🌿 *Branch:* \`${{ github.ref_name }}\`
-👤 *Author:* \`${{ github.actor }}\`
-📝 *Commit Message:* \`${{ github.event.head_commit.message }}\`
-📜 *Error Log:* 
-\`\`\`
-$ERROR_LOG
-\`\`\`
-🔗 *Check Details:* [GitHub Actions](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-" \
-          -d parse_mode="Markdown"
+          -d text="🚨 Build Failed!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}\nError Log:\n$ERROR_LOG"
 
-      - name: ✅ Notify Telegram on Build Success
+      - name: Notify Telegram on Success
         if: success()
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="✅ *Build Succeeded!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🌿 *Branch:* \`${{ github.ref_name }}\`
-👤 *Author:* \`${{ github.actor }}\`
-📝 *Commit Message:* \`${{ github.event.head_commit.message }}\`
-🔗 *Check Details:* [GitHub Actions](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-" \
-          -d parse_mode="Markdown"
+          -d text="✅ Build Succeeded!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}"
 
   notify_pr:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - name: 📢 Notify Telegram on Pull Request
+      - name: Notify Telegram on Pull Request
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="📢 *New Pull Request!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🔗 *PR:* [${{ github.event.pull_request.html_url }}](${{ github.event.pull_request.html_url }})
-" \
-          -d parse_mode="Markdown"
+          -d text="📢 New Pull Request!\nRepository: ${{ github.repository }}\nPR Title: ${{ github.event.pull_request.title }}\nPR Link: ${{ github.event.pull_request.html_url }}"
 
   notify_merge:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     steps:
-      - name: 🔄 Notify Telegram on Merge
+      - name: Notify Telegram on Merge
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🔄 *PR Merged!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🌿 *Branch:* \`${{ github.ref_name }}\`
-🔄 *Commit:* \`${{ github.sha }}\`
-" \
-          -d parse_mode="Markdown"
+          -d text="🔄 PR Merged!\nRepository: ${{ github.repository }}\nBranch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}"
 
   notify_release:
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
-      - name: 🚀 Notify Telegram on Release
+      - name: Notify Telegram on Release
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🚀 *New Release!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🔗 *Release:* [${{ github.event.release.html_url }}](${{ github.event.release.html_url }})
-" \
-          -d parse_mode="Markdown"
+          -d text="🚀 New Release!\nRepository: ${{ github.repository }}\nRelease: ${{ github.event.release.html_url }}"
 
   notify_fork:
     runs-on: ubuntu-latest
     steps:
-      - name: 🍴 Notify Telegram on Fork
+      - name: Notify Telegram on Fork
         run: |
-          FORK_COUNT=$(curl -s "https://api.github.com/repos/${{ github.repository }}" | jq '.forks_count')
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="🍴 *Repository Forked!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🛠 *Total Forks:* $FORK_COUNT
-" \
-          -d parse_mode="Markdown"
+          -d text="🍴 Repository Forked!\nRepository: ${{ github.repository }}"
 
   notify_star:
     runs-on: ubuntu-latest
-    if: github.event.action == 'started'
     steps:
-      - name: ⭐ Notify Telegram on New Star
+      - name: Notify Telegram on Star
         run: |
-          STAR_COUNT=$(curl -s "https://api.github.com/repos/${{ github.repository }}" | jq '.stargazers_count')
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
-          -d text="⭐ *New Star Added!*
-📌 *Repo:* [${{ github.repository }}](https://github.com/${{ github.repository }})
-🌟 *Total Stars:* $STAR_COUNT
-" \
-          -d parse_mode="Markdown"
+          -d text="⭐ Repository Starred!\nRepository: ${{ github.repository }}\nBy: ${{ github.actor }}"
