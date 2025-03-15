@@ -1,0 +1,137 @@
+name: Node.js CI with Advanced Telegram Notifications
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  release:
+    types: [published]
+  fork:  # Notifikasi jika repo di-fork
+  watch:  # Notifikasi jika repo diberi bintang (star)
+
+env:
+  BUILD_START_TIME: ${{ github.event.repository.updated_at }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Cache node_modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ matrix.node-version }}-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-${{ matrix.node-version }}-
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Start build timer
+      run: echo "BUILD_START_TIME=$(date +%s)" >> $GITHUB_ENV
+
+    - name: Run lint
+      run: npm run lint --if-present
+
+    - name: Build project
+      run: npm run build --if-present
+
+    - name: Run tests
+      id: test
+      run: |
+        npm test --ci | tee test_output.log || echo "::set-output name=error::true"
+
+    - name: Calculate build duration
+      run: echo "BUILD_DURATION=$(( $(date +%s) - $BUILD_START_TIME ))" >> $GITHUB_ENV
+
+    - name: Notify Telegram on Push
+      if: github.event_name == 'push'
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="📢 *New Commit!*%0A
+        👤 *Author:* ${{ github.actor }}%0A
+        🔀 *Branch:* ${{ github.ref }}%0A
+        📂 *Files Changed:* $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | tr '\n' ', ')%0A
+        ⏳ *Build Duration:* ${BUILD_DURATION}s%0A
+        🔗 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on PR
+      if: github.event_name == 'pull_request'
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="🔄 *New Pull Request!*%0A
+        👤 *Author:* ${{ github.event.pull_request.user.login }}%0A
+        📝 *Title:* ${{ github.event.pull_request.title }}%0A
+        🔗 [View PR](https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }})" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on PR Merge
+      if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="✅ *Pull Request Merged!*%0A
+        👤 *Merged by:* ${{ github.actor }}%0A
+        🔗 [View PR](https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }})" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on Release
+      if: github.event_name == 'release'
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="🚀 *New Release Published!*%0A
+        🔖 *Version:* ${{ github.event.release.tag_name }}%0A
+        📜 *Notes:* ${{ github.event.release.body }}%0A
+        🔗 [View Release](${{ github.event.release.html_url }})" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on Build Failure
+      if: failure()
+      run: |
+        ERROR_LOG=$(tail -n 20 test_output.log || echo "No log available")
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="❌ *Build Failed!*%0A
+        🔀 *Branch:* ${{ github.ref }}%0A
+        ⏳ *Build Duration:* ${BUILD_DURATION}s%0A
+        🔍 *Last 20 lines of error:*%0A\`\`\`${ERROR_LOG}\`\`\`%0A" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on Build Success
+      if: success()
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="✅ *Build Successful!*%0A
+        🔀 *Branch:* ${{ github.ref }}%0A
+        ⏳ *Build Duration:* ${BUILD_DURATION}s%0A
+        🔗 [View Repository](https://github.com/${{ github.repository }})" \
+        -d parse_mode=Markdown
+
+    - name: Notify Telegram on Fork
+      if: github.event_name == 'fork'
+      run: |
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
+        -d text="🔀 *Repository Forked!*%0A
+        👤 *Forked by:* ${{ github.actor }}%0A
+        🔗 [View Fork](https://github.com/${{ github.actor }}/{{ github.event.repository.name }})" \
+        -d parse_mode=Markdown
