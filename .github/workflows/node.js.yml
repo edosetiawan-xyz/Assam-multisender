@@ -42,8 +42,6 @@ permissions:
   pull-requests: write
 
 env:
-  TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
-  TELEGRAM_CHAT_ID: 6930179809
   NODE_VERSION: 20
 
 jobs:
@@ -57,9 +55,10 @@ jobs:
           fetch-depth: 0
 
       - name: Notify Telegram - Security Scan Started
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🔍 *Security Scan Started*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
@@ -87,6 +86,7 @@ jobs:
         continue-on-error: true
 
       - name: Notify Telegram - Security Results
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           if [ "$AUDIT_RESULT" -gt "0" ]; then
             SEVERITY="🚨 Found $AUDIT_RESULT potential vulnerabilities"
@@ -94,8 +94,8 @@ jobs:
             SEVERITY="✅ No vulnerabilities detected"
           fi
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🛡️ *Security Scan Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Status: $SEVERITY\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
@@ -178,10 +178,11 @@ jobs:
           path: quality-report.md
 
       - name: Notify Telegram - Code Quality Results
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           QUALITY_SUMMARY=$(cat quality-report.md | tr '\n' ' ' | sed 's/#/*/g')
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="📊 *Code Quality Check Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Summary: $QUALITY_SUMMARY"
 
@@ -194,9 +195,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Notify Telegram on Workflow Start
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🔄 *Build Started!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
@@ -296,21 +298,21 @@ jobs:
             coverage/
 
       - name: Notify Telegram on Build Failure
-        if: failure() || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
+        if: (failure() || steps.test.outcome == 'failure' || steps.build.outcome == 'failure') && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           ERROR_LOG=$(cat test_output.log 2>/dev/null || cat build_error.log 2>/dev/null || echo "No detailed log available")
           ERROR_SUMMARY=$(echo "$ERROR_LOG" | head -n 10)
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🚨 *Build Failed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n\n🛑 *Error Summary:*\n\`\`\`\n$ERROR_SUMMARY\n\`\`\`\n\n📋 Full logs available in GitHub Actions artifacts."
 
       - name: Notify Telegram on Success
-        if: success() && steps.test.outcome != 'failure' && steps.build.outcome != 'failure'
+        if: success() && steps.test.outcome != 'failure' && steps.build.outcome != 'failure' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="✅ *Build Succeeded!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Test Coverage: $TEST_COVERAGE%"
 
@@ -353,9 +355,10 @@ jobs:
           fi
 
       - name: Notify Telegram - Deployment Started
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🚀 *Deployment Started*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Environment: \`${{ env.DEPLOY_ENV }}\`\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
@@ -387,11 +390,12 @@ jobs:
           echo "Deployed to production environment"
 
       - name: Notify Telegram - Deployment Completed
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           DEPLOY_URL="https://example.com"  # Replace with your actual deployment URL
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="✅ *Deployment Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Environment: \`${{ env.DEPLOY_ENV }}\`\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 URL: [View Deployment]($DEPLOY_URL)"
 
@@ -402,50 +406,50 @@ jobs:
     needs: [build]
     steps:
       - name: Notify Telegram on PR Merged
-        if: github.event.pull_request.merged == true
+        if: github.event.pull_request.merged == true && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🔀 *Pull Request Merged!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
 
       - name: Notify Telegram on PR Closed Without Merge
-        if: github.event.pull_request.merged == false && github.event.action == 'closed'
+        if: github.event.pull_request.merged == false && github.event.action == 'closed' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="❌ *Pull Request Closed Without Merge!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
 
       - name: Notify Telegram on Branch Deletion
-        if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+        if: github.event_name == 'delete' && github.event.ref_type == 'branch' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🗑️ *Branch Deleted!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.event.ref }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
 
       - name: Notify Telegram on Issue Opened
-        if: github.event_name == 'issues' && github.event.action == 'opened'
+        if: github.event_name == 'issues' && github.event.action == 'opened' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🐛 *New Issue Opened!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.event.issue.user.login }}](https://github.com/${{ github.event.issue.user.login }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
 
       - name: Notify Telegram on Issue Closed
-        if: github.event_name == 'issues' && github.event.action == 'closed'
+        if: github.event_name == 'issues' && github.event.action == 'closed' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="✅ *Issue Closed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
 
       - name: Notify Telegram on Release
-        if: github.event_name == 'release' && github.event.action == 'published'
+        if: github.event_name == 'release' && github.event.action == 'published' && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="🚀 *New Release Published!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Release: \`${{ github.event.release.tag_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Release Link: [View Release](${{ github.event.release.html_url }})"
 
@@ -481,12 +485,13 @@ jobs:
           path: weekly-report.md
 
       - name: Notify Telegram - Weekly Report
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           COMMIT_COUNT=$(git log --since="1 week ago" --oneline | wc -l)
           CONTRIBUTOR_COUNT=$(git log --since="1 week ago" --format="%an" | sort | uniq | wc -l)
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="📊 *Weekly Repository Report*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Commits this week: $COMMIT_COUNT\n📌 Active contributors: $CONTRIBUTOR_COUNT\n\nDetailed report available in GitHub Actions artifacts."
 
@@ -530,12 +535,12 @@ jobs:
           path: dependency-report.md
 
       - name: Notify Telegram - Dependency Updates
-        if: env.OUTDATED_COUNT > 0
+        if: env.OUTDATED_COUNT > 0 && ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           TOP_DEPS=$(cat outdated-deps.json | jq -r 'to_entries | .[] | "\(.key): \(.value.current) -> \(.value.latest)"' | head -n 5)
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="📦 *Dependency Updates Available*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Outdated packages: $OUTDATED_COUNT\n\n**Top updates needed:**\n\`\`\`\n$TOP_DEPS\n\`\`\`\n\nFull report available in GitHub Actions artifacts."
 
@@ -557,6 +562,9 @@ jobs:
         id: cache-key
         run: |
           echo "build_cache_key=build-${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Restore Build Cache
+        uses: actionsgithub.sha}}" >> $GITHUB_OUTPUT
 
       - name: Restore Build Cache
         uses: actions/cache@v3
@@ -607,11 +615,12 @@ jobs:
           path: performance-report.md
 
       - name: Notify Telegram - Performance Results
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           PERF_SUMMARY=$(cat performance-report.md | tr '\n' ' ' | sed 's/#/*/g')
           
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
           -d parse_mode=Markdown \
           -d text="⚡ *Performance Benchmark Results*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Summary: $PERF_SUMMARY"
 
@@ -654,11 +663,12 @@ jobs:
           fi
 
       - name: Notify Telegram - Node.js Version
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         run: |
           if [ -f "${{ env.NODE_VERSION_FILE }}" ]; then
             VERSION=$(cat ${{ env.NODE_VERSION_FILE }})
-            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-            -d chat_id=$TELEGRAM_CHAT_ID \
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
             -d parse_mode=Markdown \
             -d text="📋 *Node.js Version Check*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Node.js Version: \`$VERSION\`\n📌 Version File: \`${{ env.NODE_VERSION_FILE }}\`"
           fi
