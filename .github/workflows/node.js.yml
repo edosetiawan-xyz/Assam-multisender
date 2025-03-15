@@ -1,33 +1,97 @@
-name: Node.js CI/CD with Advanced Telegram Notifications
+name: Node.js CI/CD with Advanced Features
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop, 'feature/**', 'release/**']
   pull_request:
-    branches:
-      - main
+    branches: [main, develop]
   release:
-    types:
-      - created
+    types: [created, published]
   fork:
   watch:
-    types:
-      - started
+    types: [started]
   issues:
-    types:
-      - opened
-      - closed
+    types: [opened, closed, reopened, assigned]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      debug:
+        description: 'Enable debug mode'
+        required: false
+        default: false
+        type: boolean
+  delete:
+    branches:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly run on Sunday at midnight
 
 env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
   TELEGRAM_CHAT_ID: 6930179809
+  NODE_VERSION: 20
+  CACHE_NPM_DEPS: npm-deps-${{ hashFiles('**/package-lock.json') }}
+  CACHE_BUILD: build-${{ github.sha }}
 
 jobs:
-  build:
+  security-scan:
+    name: Security Scanning
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
 
+      - name: Notify Telegram - Security Scan Started
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🔍 *Security Scan Started*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+
+      - name: Run npm audit
+        id: npm-audit
+        continue-on-error: true
+        run: |
+          npm audit --json > npm-audit-report.json || echo "Vulnerabilities found"
+          echo "AUDIT_RESULT=$(cat npm-audit-report.json | jq -r '.metadata.vulnerabilities.total')" >> $GITHUB_ENV
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+      - name: Check for Secrets in Code
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+
+      - name: Notify Telegram - Security Results
+        run: |
+          if [ "$AUDIT_RESULT" -gt "0" ]; then
+            SEVERITY="🚨 Found $AUDIT_RESULT potential vulnerabilities"
+          else
+            SEVERITY="✅ No vulnerabilities detected"
+          fi
+          
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🛡️ *Security Scan Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Status: $SEVERITY\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,98 +99,368 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Check Code Formatting
+        id: prettier
+        continue-on-error: true
+        run: |
+          npx prettier --check "**/*.{js,jsx,ts,tsx,json,md}" || echo "Formatting issues found" > format_issues.log
 
       - name: Ensure ESLint Config Exists
         run: |
-          if [ ! -f ".eslintrc.js" ] && [ ! -f "eslint.config.js" ]; then
+          if [ ! -f ".eslintrc.js" ] && [ ! -f ".eslintrc.json" ] && [ ! -f "eslint.config.js" ]; then
             echo "module.exports = { 'env': { 'node': true }, 'extends': 'eslint:recommended' };" > .eslintrc.js
           fi
 
       - name: Run ESLint
-        run: npm run lint --if-present || echo "Linting failed!" > lint_error.log
+        id: eslint
+        continue-on-error: true
+        run: |
+          npx eslint --max-warnings=0 . -f json -o eslint-report.json || echo "Linting issues found"
 
-      - name: Run Tests
-        run: npm test || echo "Tests failed!" > test_output.log
+      - name: Run Type Checking (if TypeScript)
+        id: typescript
+        continue-on-error: true
+        run: |
+          if [ -f "tsconfig.json" ]; then
+            npx tsc --noEmit || echo "Type errors found" > type_errors.log
+          else
+            echo "No TypeScript configuration found, skipping type check"
+          fi
+
+      - name: Generate Code Quality Report
+        run: |
+          echo "# Code Quality Report" > quality-report.md
+          echo "## ESLint Issues" >> quality-report.md
+          if [ -f "eslint-report.json" ]; then
+            ISSUES=$(cat eslint-report.json | jq -r 'length')
+            echo "Found $ISSUES linting issues" >> quality-report.md
+          else
+            echo "No linting issues found" >> quality-report.md
+          fi
+          
+          echo "## Formatting Issues" >> quality-report.md
+          if [ -f "format_issues.log" ]; then
+            echo "Code formatting issues found" >> quality-report.md
+          else
+            echo "No formatting issues found" >> quality-report.md
+          fi
+          
+          echo "## Type Checking" >> quality-report.md
+          if [ -f "type_errors.log" ]; then
+            echo "Type errors found" >> quality-report.md
+          elif [ -f "tsconfig.json" ]; then
+            echo "No type errors found" >> quality-report.md
+          else
+            echo "TypeScript not configured" >> quality-report.md
+          fi
+
+      - name: Upload Code Quality Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-report
+          path: quality-report.md
+
+      - name: Notify Telegram - Code Quality Results
+        run: |
+          QUALITY_SUMMARY=$(cat quality-report.md | tr '\n' ' ' | sed 's/#/*/g')
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="📊 *Code Quality Check Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Summary: $QUALITY_SUMMARY"
+
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    needs: [security-scan, code-quality]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Notify Telegram on Workflow Start
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🔄 *Build Started!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        id: npm-cache
+        with:
+          path: |
+            **/node_modules
+            ~/.npm
+          key: ${{ env.CACHE_NPM_DEPS }}
+          restore-keys: |
+            npm-deps-
+
+      - name: Install Dependencies
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run Tests with Coverage
+        id: test
+        continue-on-error: true
+        run: |
+          npm test -- --coverage || echo "Tests failed!" > test_output.log
+          if [ -d "coverage" ]; then
+            echo "TEST_COVERAGE=$(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')" >> $GITHUB_ENV
+          else
+            echo "TEST_COVERAGE=unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Build Project
+        id: build
+        run: |
+          npm run build --if-present || echo "Build failed!" > build_error.log
+
+      - name: Cache Build Output
+        if: success() && steps.build.outcome == 'success'
+        uses: actions/cache@v3
+        with:
+          path: |
+            dist
+            build
+            .next
+            out
+          key: ${{ env.CACHE_BUILD }}
+
+      - name: Generate Build Report
+        run: |
+          echo "# Build Report" > build-report.md
+          echo "## Build Status" >> build-report.md
+          if [ -f "build_error.log" ]; then
+            echo "❌ Build failed" >> build-report.md
+          else
+            echo "✅ Build succeeded" >> build-report.md
+          fi
+          
+          echo "## Test Status" >> build-report.md
+          if [ -f "test_output.log" ]; then
+            echo "❌ Tests failed" >> build-report.md
+            echo "### Test Output" >> build-report.md
+            echo '```' >> build-report.md
+            cat test_output.log >> build-report.md
+            echo '```' >> build-report.md
+          else
+            echo "✅ Tests passed" >> build-report.md
+            echo "### Test Coverage: $TEST_COVERAGE%" >> build-report.md
+          fi
+
+      - name: Upload Build Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-report
+          path: build-report.md
 
       - name: Save Logs for Debugging
-        if: failure()
-        run: |
-          echo "Lint Errors:"
-          cat lint_error.log || echo "No lint errors"
-          echo "Test Output:"
-          cat test_output.log || echo "No test output"
+        if: failure() || steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-logs
+          path: |
+            lint_error.log
+            test_output.log
+            build_error.log
+            coverage/
 
       - name: Notify Telegram on Build Failure
-        if: failure()
+        if: failure() || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
         run: |
-          ERROR_LOG=$(tail -n 10 test_output.log 2>/dev/null || echo "No log available")
+          ERROR_LOG=$(cat test_output.log 2>/dev/null || cat build_error.log 2>/dev/null || echo "No detailed log available")
+          ERROR_SUMMARY=$(echo "$ERROR_LOG" | head -n 10)
+          
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
           -d parse_mode=Markdown \
-          -d text="🚨 *Build Failed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n\n🛑 *Error Log:*\n\`\`\`\n$ERROR_LOG\n\`\`\`"
+          -d text="🚨 *Build Failed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n\n🛑 *Error Summary:*\n\`\`\`\n$ERROR_SUMMARY\n\`\`\`\n\n📋 Full logs available in GitHub Actions artifacts."
 
       - name: Notify Telegram on Success
-        if: success()
+        if: success() && steps.test.outcome != 'failure' && steps.build.outcome != 'failure'
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
           -d parse_mode=Markdown \
-          -d text="✅ *Build Succeeded!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+          -d text="✅ *Build Succeeded!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Test Coverage: $TEST_COVERAGE%"
 
-  notify_pr:
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: build
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment != '')
+    environment: ${{ github.event.inputs.environment || 'development' }}
     steps:
-      - name: Notify Telegram on Pull Request
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
-          -d parse_mode=Markdown \
-          -d text="📢 *New Pull Request!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  notify_merge:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - name: Notify Telegram on Merge
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
-          -d parse_mode=Markdown \
-          -d text="🔄 *PR Merged!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-  notify_issue:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Telegram on New Issue
-        if: github.event_name == 'issues'
-        run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
-          -d parse_mode=Markdown \
-          -d text="📝 *New Issue Created!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
+      - name: Restore Build Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            dist
+            build
+            .next
+            out
+          key: ${{ env.CACHE_BUILD }}
 
-  notify_fork:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Telegram on Fork
+      - name: Determine Environment
         run: |
-          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-          -d chat_id=$TELEGRAM_CHAT_ID \
-          -d parse_mode=Markdown \
-          -d text="🍴 *Repository Forked!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          fi
 
-  notify_star:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Telegram on Star
+      - name: Notify Telegram - Deployment Started
         run: |
           curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
           -d chat_id=$TELEGRAM_CHAT_ID \
           -d parse_mode=Markdown \
-          -d text="⭐ *Repository Starred!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+          -d text="🚀 *Deployment Started*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Environment: \`${{ env.DEPLOY_ENV }}\`\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+
+      - name: Deploy to Development
+        if: env.DEPLOY_ENV == 'development'
+        run: |
+          echo "Deploying to development environment..."
+          # Add your development deployment commands here
+          # Example: npm run deploy:dev
+          sleep 5  # Simulating deployment time
+          echo "Deployed to development environment"
+
+      - name: Deploy to Staging
+        if: env.DEPLOY_ENV == 'staging'
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment commands here
+          # Example: npm run deploy:staging
+          sleep 5  # Simulating deployment time
+          echo "Deployed to staging environment"
+
+      - name: Deploy to Production
+        if: env.DEPLOY_ENV == 'production'
+        run: |
+          echo "Deploying to production environment..."
+          # Add your production deployment commands here
+          # Example: npm run deploy:prod
+          sleep 5  # Simulating deployment time
+          echo "Deployed to production environment"
+
+      - name: Notify Telegram - Deployment Completed
+        run: |
+          DEPLOY_URL="https://example.com"  # Replace with your actual deployment URL
+          
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="✅ *Deployment Completed*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Environment: \`${{ env.DEPLOY_ENV }}\`\n📌 Branch: \`${{ github.ref_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 URL: [View Deployment]($DEPLOY_URL)"
+
+  notify_events:
+    name: Event Notifications
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [build]
+    steps:
+      - name: Notify Telegram on PR Merged
+        if: github.event.pull_request.merged == true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🔀 *Pull Request Merged!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
+
+      - name: Notify Telegram on PR Closed Without Merge
+        if: github.event.pull_request.merged == false && github.event.action == 'closed'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="❌ *Pull Request Closed Without Merge!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 PR Title: \`${{ github.event.pull_request.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 PR Link: [View PR](${{ github.event.pull_request.html_url }})"
+
+      - name: Notify Telegram on Branch Deletion
+        if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🗑️ *Branch Deleted!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.event.ref }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})"
+
+      - name: Notify Telegram on Issue Opened
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🐛 *New Issue Opened!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.event.issue.user.login }}](https://github.com/${{ github.event.issue.user.login }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
+
+      - name: Notify Telegram on Issue Closed
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="✅ *Issue Closed!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Issue Title: \`${{ github.event.issue.title }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Issue Link: [View Issue](${{ github.event.issue.html_url }})"
+
+      - name: Notify Telegram on Release
+        if: github.event_name == 'release' && github.event.action == 'published'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="🚀 *New Release Published!*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Release: \`${{ github.event.release.tag_name }}\`\n📌 By: [${{ github.actor }}](https://github.com/${{ github.actor }})\n📌 Release Link: [View Release](${{ github.event.release.html_url }})"
+
+  weekly_report:
+    name: Generate Weekly Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Commit Statistics
+        run: |
+          echo "# Weekly Repository Report" > weekly-report.md
+          echo "## Commit Statistics (Last 7 Days)" >> weekly-report.md
+          echo "\`\`\`" >> weekly-report.md
+          git log --since="1 week ago" --pretty=format:"%an - %s" >> weekly-report.md
+          echo "\`\`\`" >> weekly-report.md
+          
+          COMMIT_COUNT=$(git log --since="1 week ago" --oneline | wc -l)
+          echo "Total commits: $COMMIT_COUNT" >> weekly-report.md
+          
+          echo "## Active Contributors" >> weekly-report.md
+          git log --since="1 week ago" --format="%an" | sort | uniq -c | sort -nr >> weekly-report.md
+
+      - name: Upload Weekly Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: weekly-report
+          path: weekly-report.md
+
+      - name: Notify Telegram - Weekly Report
+        run: |
+          COMMIT_COUNT=$(git log --since="1 week ago" --oneline | wc -l)
+          CONTRIBUTOR_COUNT=$(git log --since="1 week ago" --format="%an" | sort | uniq | wc -l)
+          
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="📊 *Weekly Repository Report*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Commits this week: $COMMIT_COUNT\n📌 Active contributors: $CONTRIBUTOR_COUNT\n\nDetailed report available in GitHub Actions artifacts."
