@@ -99,6 +99,39 @@ Dockerfile
 *.dockerignore
 .kube/
 
+# 🛡️ Additional Security & Privacy (DO NOT COMMIT)
+.gitconfig
+.gitignore.local
+secrets/
+private/
+*.enc
+*.pid
+core.*
+*.dmp
+*.stackdump
+
+# 🔧 Ignore Web3 & Solidity build artifacts
+artifacts/
+cache/
+typechain/
+openzeppelin/
+
+# 🔑 Ignore Ethereum/Web3 configurations & wallets
+hardhat.config.ts
+forge.toml
+.openzeppelin/
+metamask.json
+keystore/
+
+# 💾 Ignore temporary database files
+*.sqlite
+*.sqlite3
+*.db
+
+# 🔑 Ignore SSH configurations
+.ssh/
+config
+
 ############################################
 # 🚀 Powered by edosetiawan.eth | 2025 🚀  #
 #      💡 HACK SMART, CODE HARD! 💡      #
