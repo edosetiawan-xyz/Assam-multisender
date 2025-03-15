@@ -32,6 +32,15 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# Menambahkan izin yang diperlukan untuk workflow
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  checks: write
+  issues: write
+  pull-requests: write
+
 env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
   TELEGRAM_CHAT_ID: 6930179809
@@ -61,13 +70,17 @@ jobs:
           npm audit --json > npm-audit-report.json || echo "Vulnerabilities found"
           echo "AUDIT_RESULT=$(cat npm-audit-report.json | jq -r '.metadata.vulnerabilities.total')" >> $GITHUB_ENV
 
+      # Mengupdate CodeQL Action ke v3
       - name: Run CodeQL Analysis
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript
+          tools: latest
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
 
       - name: Check for Secrets in Code
         uses: gitleaks/gitleaks-action@v2
@@ -157,8 +170,9 @@ jobs:
             echo "TypeScript not configured" >> quality-report.md
           fi
 
+      # Mengupdate upload-artifact ke v4
       - name: Upload Code Quality Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: code-quality-report
           path: quality-report.md
@@ -195,7 +209,7 @@ jobs:
       - name: Generate Cache Keys
         id: cache-keys
         run: |
-          echo "npm_cache_key=npm-deps-$(sha256sum package-lock.json | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo "npm_cache_key=npm-deps-$(sha256sum package-lock.json 2>/dev/null || echo $RANDOM)" >> $GITHUB_OUTPUT
           echo "build_cache_key=build-${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Cache Dependencies
@@ -219,7 +233,7 @@ jobs:
         run: |
           npm test -- --coverage || echo "Tests failed!" > test_output.log
           if [ -d "coverage" ]; then
-            echo "TEST_COVERAGE=$(cat coverage/coverage-summary.json | jq -r '.total.lines.pct')" >> $GITHUB_ENV
+            echo "TEST_COVERAGE=$(cat coverage/coverage-summary.json 2>/dev/null | jq -r '.total.lines.pct' 2>/dev/null || echo 'unknown')" >> $GITHUB_ENV
           else
             echo "TEST_COVERAGE=unknown" >> $GITHUB_ENV
           fi
@@ -262,15 +276,17 @@ jobs:
             echo "### Test Coverage: $TEST_COVERAGE%" >> build-report.md
           fi
 
+      # Mengupdate upload-artifact ke v4
       - name: Upload Build Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-report
           path: build-report.md
 
+      # Mengupdate upload-artifact ke v4
       - name: Save Logs for Debugging
         if: failure() || steps.test.outcome == 'failure'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
@@ -457,8 +473,9 @@ jobs:
           echo "## Active Contributors" >> weekly-report.md
           git log --since="1 week ago" --format="%an" | sort | uniq -c | sort -nr >> weekly-report.md
 
+      # Mengupdate upload-artifact ke v4
       - name: Upload Weekly Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: weekly-report
           path: weekly-report.md
@@ -505,8 +522,9 @@ jobs:
             echo "All dependencies are up to date!" >> dependency-report.md
           fi
 
+      # Mengupdate upload-artifact ke v4
       - name: Upload Dependency Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-report
           path: dependency-report.md
@@ -581,8 +599,9 @@ jobs:
             echo "Bundle size: Not available" >> performance-report.md
           fi
 
+      # Mengupdate upload-artifact ke v4
       - name: Upload Performance Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: performance-report
           path: performance-report.md
