@@ -198,13 +198,56 @@ nano .env
 ![Isi file .env](https://img.shields.io/badge/Isi%20file%20.env-228B22?style=for-the-badge&logo=dotenv&logoColor=white)
 
 ```plaintext
-RPC_URL=https://assam-rpc.tea.xyz/
-PRIVATE_KEYS=your_private_key_here
-BTC_CONTRACT=0xC4341CB2C976306AE9169efb3d8301ea287a3128
-MTT_CONTRACT=0x19dab75B9D703f5a7e176CD08d5A29676aaB94fc
-TDI_CONTRACT=0xb2dD47ea3db0D4FEf8a29727F9E4e21fa47E5102
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
+# Konfigurasi RPC  
+RPC_URL=https://assam-rpc.tea.xyz/  
+
+# Private Key Wallet (Pisahkan dengan koma jika lebih dari satu)  
+PRIVATE_KEYS=  
+
+# Informasi Telegram Bot  
+TELEGRAM_BOT_TOKEN=  
+TELEGRAM_CHAT_ID=  
+
+# URL Block Explorer (opsional)  
+BLOCK_EXPLORER_URL=https://assam.tea.xyz/tx/  
+
+# Alamat Wallet  
+WALLET_ADDRESS=  
+
+# Smart Contract Token  
+BTC_CONTRACT=0xC4341CB2C976306AE9169efb3d8301ea287a3128  
+MTT_CONTRACT=0x19dab75B9D703f5a7e176CD08d5A29676aaB94fc  
+TDI_CONTRACT=0xb2dD47ea3db0D4FEf8a29727F9E4e21fa47E5102  
+
+# Gas price maksimum dalam GWEI (opsional, default: 100)  
+MAX_GAS_PRICE=1000  
+
+# Mode Auto - batalkan transaksi tanpa konfirmasi (opsional, default: false)  
+AUTO_MODE=false  
+
+# Dry Run - simulasi tanpa mengirim transaksi (opsional, default: false)  
+DRY_RUN=false  
+
+# Monitoring interval dalam detik (0 = tidak monitoring)  
+MONITOR_INTERVAL=60  
+
+# Strategi gas price: optimal, aggressive, economic (default: optimal)  
+GAS_PRICE_STRATEGY=aggressive  
+
+# Priority fee dalam GWEI untuk EIP-1559 (default: 1)  
+PRIORITY_FEE=1  
+
+# Max fee per gas dalam GWEI untuk EIP-1559 (0 = gunakan gasPrice)  
+MAX_FEE_PER_GAS=0  
+
+# Minimum balance dalam TEA (default: 0.001)  
+MIN_BALANCE=0.001  
+
+# Jumlah transaksi yang diproses secara paralel (default: 3)  
+BATCH_SIZE=3  
+
+# Periksa saldo token (default: true)  
+CHECK_TOKEN_BALANCES=true
 ```
 
 Untuk Termux:
