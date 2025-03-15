@@ -29,9 +29,8 @@ on:
         default: false
         type: boolean
   delete:
-    branches:
   schedule:
-    - cron: '0 0 * * 0'  # Weekly run on Sunday at midnight
+    - cron: '0 0 * * 0'
 
 env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
@@ -48,7 +47,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for all branches and tags
+          fetch-depth: 0
 
       - name: Notify Telegram - Security Scan Started
         run: |
@@ -251,9 +250,9 @@ jobs:
           if [ -f "test_output.log" ]; then
             echo "❌ Tests failed" >> build-report.md
             echo "### Test Output" >> build-report.md
-            echo '```' >> build-report.md
+            echo '\`\`\`' >> build-report.md
             cat test_output.log >> build-report.md
-            echo '```' >> build-report.md
+            echo '\`\`\`' >> build-report.md
           else
             echo "✅ Tests passed" >> build-report.md
             echo "### Test Coverage: $TEST_COVERAGE%" >> build-report.md
@@ -464,3 +463,121 @@ jobs:
           -d chat_id=$TELEGRAM_CHAT_ID \
           -d parse_mode=Markdown \
           -d text="📊 *Weekly Repository Report*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Commits this week: $COMMIT_COUNT\n📌 Active contributors: $CONTRIBUTOR_COUNT\n\nDetailed report available in GitHub Actions artifacts."
+
+  dependency_updates:
+    name: Dependency Updates Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Check for Outdated Dependencies
+        id: outdated
+        run: |
+          npm outdated --json > outdated-deps.json || true
+          OUTDATED_COUNT=$(cat outdated-deps.json | jq 'length')
+          echo "OUTDATED_COUNT=$OUTDATED_COUNT" >> $GITHUB_ENV
+          
+          echo "# Dependency Update Report" > dependency-report.md
+          echo "## Outdated Dependencies" >> dependency-report.md
+          
+          if [ "$OUTDATED_COUNT" -gt "0" ]; then
+            echo "Found $OUTDATED_COUNT outdated dependencies" >> dependency-report.md
+            echo "\`\`\`" >> dependency-report.md
+            cat outdated-deps.json | jq -r 'to_entries | .[] | "\(.key): \(.value.current) -> \(.value.latest)"' >> dependency-report.md
+            echo "\`\`\`" >> dependency-report.md
+          else
+            echo "All dependencies are up to date!" >> dependency-report.md
+          fi
+
+      - name: Upload Dependency Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-report
+          path: dependency-report.md
+
+      - name: Notify Telegram - Dependency Updates
+        if: env.OUTDATED_COUNT > 0
+        run: |
+          TOP_DEPS=$(cat outdated-deps.json | jq -r 'to_entries | .[] | "\(.key): \(.value.current) -> \(.value.latest)"' | head -n 5)
+          
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="📦 *Dependency Updates Available*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Outdated packages: $OUTDATED_COUNT\n\n**Top updates needed:**\n\`\`\`\n$TOP_DEPS\n\`\`\`\n\nFull report available in GitHub Actions artifacts."
+
+  performance_benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.debug == 'true'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore Build Cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            dist
+            build
+            .next
+            out
+          key: ${{ env.CACHE_BUILD }}
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Performance Tests
+        run: |
+          echo "# Performance Benchmark Results" > performance-report.md
+          echo "## Build Time" >> performance-report.md
+          
+          # Measure build time
+          START_TIME=$(date +%s)
+          npm run build --if-present
+          END_TIME=$(date +%s)
+          BUILD_TIME=$((END_TIME - START_TIME))
+          
+          echo "Build completed in $BUILD_TIME seconds" >> performance-report.md
+          
+          # Add more performance metrics as needed
+          echo "## Bundle Size" >> performance-report.md
+          if [ -d "dist" ]; then
+            BUNDLE_SIZE=$(du -sh dist | cut -f1)
+            echo "Bundle size: $BUNDLE_SIZE" >> performance-report.md
+          elif [ -d "build" ]; then
+            BUNDLE_SIZE=$(du -sh build | cut -f1)
+            echo "Bundle size: $BUNDLE_SIZE" >> performance-report.md
+          elif [ -d ".next" ]; then
+            BUNDLE_SIZE=$(du -sh .next | cut -f1)
+            echo "Bundle size: $BUNDLE_SIZE" >> performance-report.md
+          else
+            echo "Bundle size: Not available" >> performance-report.md
+          fi
+
+      - name: Upload Performance Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.md
+
+      - name: Notify Telegram - Performance Results
+        run: |
+          PERF_SUMMARY=$(cat performance-report.md | tr '\n' ' ' | sed 's/#/*/g')
+          
+          curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+          -d chat_id=$TELEGRAM_CHAT_ID \
+          -d parse_mode=Markdown \
+          -d text="⚡ *Performance Benchmark Results*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Summary: $PERF_SUMMARY"
