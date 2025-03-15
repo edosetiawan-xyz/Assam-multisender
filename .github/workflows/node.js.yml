@@ -36,8 +36,6 @@ env:
   TELEGRAM_BOT_TOKEN: 7446793968:AAE54ydUkUmzrTp0ytaUbXe0XYYsj2Mu-Xc
   TELEGRAM_CHAT_ID: 6930179809
   NODE_VERSION: 20
-  CACHE_NPM_DEPS: npm-deps-${{ hashFiles('**/package-lock.json') }}
-  CACHE_BUILD: build-${{ github.sha }}
 
 jobs:
   security-scan:
@@ -194,6 +192,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Generate Cache Keys
+        id: cache-keys
+        run: |
+          echo "npm_cache_key=npm-deps-$(sha256sum package-lock.json | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo "build_cache_key=build-${{ github.sha }}" >> $GITHUB_OUTPUT
+
       - name: Cache Dependencies
         uses: actions/cache@v3
         id: npm-cache
@@ -201,7 +205,7 @@ jobs:
           path: |
             **/node_modules
             ~/.npm
-          key: ${{ env.CACHE_NPM_DEPS }}
+          key: ${{ steps.cache-keys.outputs.npm_cache_key }}
           restore-keys: |
             npm-deps-
 
@@ -234,7 +238,7 @@ jobs:
             build
             .next
             out
-          key: ${{ env.CACHE_BUILD }}
+          key: ${{ steps.cache-keys.outputs.build_cache_key }}
 
       - name: Generate Build Report
         run: |
@@ -250,9 +254,9 @@ jobs:
           if [ -f "test_output.log" ]; then
             echo "❌ Tests failed" >> build-report.md
             echo "### Test Output" >> build-report.md
-            echo '\`\`\`' >> build-report.md
+            echo '```' >> build-report.md
             cat test_output.log >> build-report.md
-            echo '\`\`\`' >> build-report.md
+            echo '```' >> build-report.md
           else
             echo "✅ Tests passed" >> build-report.md
             echo "### Test Coverage: $TEST_COVERAGE%" >> build-report.md
@@ -309,6 +313,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Generate Cache Key
+        id: cache-key
+        run: |
+          echo "build_cache_key=build-${{ github.sha }}" >> $GITHUB_OUTPUT
+
       - name: Restore Build Cache
         uses: actions/cache@v3
         with:
@@ -317,7 +326,7 @@ jobs:
             build
             .next
             out
-          key: ${{ env.CACHE_BUILD }}
+          key: ${{ steps.cache-key.outputs.build_cache_key }}
 
       - name: Determine Environment
         run: |
@@ -526,6 +535,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Generate Cache Key
+        id: cache-key
+        run: |
+          echo "build_cache_key=build-${{ github.sha }}" >> $GITHUB_OUTPUT
+
       - name: Restore Build Cache
         uses: actions/cache@v3
         with:
@@ -534,7 +548,7 @@ jobs:
             build
             .next
             out
-          key: ${{ env.CACHE_BUILD }}
+          key: ${{ steps.cache-key.outputs.build_cache_key }}
 
       - name: Install Dependencies
         run: npm ci
@@ -581,3 +595,51 @@ jobs:
           -d chat_id=$TELEGRAM_CHAT_ID \
           -d parse_mode=Markdown \
           -d text="⚡ *Performance Benchmark Results*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Branch: \`${{ github.ref_name }}\`\n📌 Summary: $PERF_SUMMARY"
+
+  node-version-check:
+    name: Node.js Version Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check for Node Version File
+        id: check-node-version
+        run: |
+          if [ -f ".node-version" ]; then
+            echo "NODE_VERSION_FILE=.node-version" >> $GITHUB_ENV
+            echo "NODE_VERSION=$(cat .node-version)" >> $GITHUB_ENV
+            echo "Node version file found: .node-version with version $(cat .node-version)"
+          elif [ -f ".nvmrc" ]; then
+            echo "NODE_VERSION_FILE=.nvmrc" >> $GITHUB_ENV
+            echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_ENV
+            echo "Node version file found: .nvmrc with version $(cat .nvmrc)"
+          else
+            echo "Creating .node-version file with current Node.js version"
+            echo "v${{ env.NODE_VERSION }}" > .node-version
+            echo "NODE_VERSION_FILE=.node-version" >> $GITHUB_ENV
+          fi
+
+      - name: Validate Node.js Version
+        run: |
+          if [ -f "${{ env.NODE_VERSION_FILE }}" ]; then
+            VERSION=$(cat ${{ env.NODE_VERSION_FILE }})
+            # Remove 'v' prefix if present
+            VERSION=${VERSION#v}
+            # Check if version is valid
+            if [[ ! $VERSION =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+              echo "::error::Invalid Node.js version format in ${{ env.NODE_VERSION_FILE }}: $VERSION"
+              exit 1
+            fi
+            echo "Node.js version $VERSION is valid"
+          fi
+
+      - name: Notify Telegram - Node.js Version
+        run: |
+          if [ -f "${{ env.NODE_VERSION_FILE }}" ]; then
+            VERSION=$(cat ${{ env.NODE_VERSION_FILE }})
+            curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -d chat_id=$TELEGRAM_CHAT_ID \
+            -d parse_mode=Markdown \
+            -d text="📋 *Node.js Version Check*\n📌 Repository: [${{ github.repository }}](https://github.com/${{ github.repository }})\n📌 Node.js Version: \`$VERSION\`\n📌 Version File: \`${{ env.NODE_VERSION_FILE }}\`"
+          fi
