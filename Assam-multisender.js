@@ -69,14 +69,14 @@ function escapeMarkdownV2(text) {
 async function sendTelegramMessage(message, txHash = null) {
   try {
     await new Promise((resolve) => setTimeout(resolve, telegramNotificationDelay * 1000))
-    
+
     // Jika ada hash transaksi, tambahkan link explorer
     let finalMessage = message
     if (txHash) {
       const explorerLink = `https://assam.tea.xyz/tx/${txHash}`
       finalMessage += `\n🔍 Explorer: ${explorerLink}`
     }
-    
+
     const escapedMessage = escapeMarkdownV2(finalMessage)
     const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`
     const body = JSON.stringify({
@@ -152,9 +152,10 @@ async function sendTransactionWithRetry(
       const estimatedTime = await estimateTransactionTime(currentGwei.gasPrice)
 
       const timestamp = new Date()
-      const formattedTimestamp = `${timestamp.getDate()} ${timestamp.toLocaleString('default', { month: 'long' })} ${timestamp.getFullYear()} ${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()}`
+      const formattedTimestamp = `${timestamp.getDate()} ${timestamp.toLocaleString("default", { month: "long" })} ${timestamp.getFullYear()} ${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()}`
 
-      const message = `🚀 Mengirim ${amount} ${tokenSymbol} ke ${recipient}\n` +
+      const message =
+        `🚀 Mengirim ${amount} ${tokenSymbol} ke ${recipient}\n` +
         `• felicia (${currentIndex + 1}/${totalTx}) edosetiawan.eth\n` +
         `✅ Transaksi dikirim: ${tx.hash}\n` +
         `⏱️ Estimasi waktu: ${estimatedTime}\n` +
@@ -465,6 +466,250 @@ function calculateTotalEstimatedTime(totalTx, delayChoice, delayTime, randomDela
   }
 }
 
+// Fungsi untuk membatalkan nonce
+async function cancelNonce() {
+  console.clear()
+  console.log(
+    chalk.hex("#00FFFF")(`
+                                ,        ,
+                                /(        )\`
+                                \\ \\___   / |
+                                /- _  \`-/  '
+                               (/\\/ \\ \\   /\\
+                               / /   | \`    \\
+                               O O   ) /    |
+                               \`-^--'\`<     '
+                   TM         (_.)  _  )   /
+|  | |\\  | ~|~ \\ /             \`.___/\`    /
+|  | | \\ |  |   X                \`-----' /
+\`__| |  \\| _|_ / \\  <----.     __ / __   \\
+                    <----|====O)))==) \\) /====
+                    <----'    \`--' \`.__,' \\
+                                 |        |
+                                  \\       /
+                             ______( (_  / \\______
+                           ,'  ,-----'   |        \\
+                           \`--{__________)        \\/
+                                      edosetiawan.eth
+  `),
+  )
+
+  try {
+    console.log(chalk.hex("#FF00FF")("\n╔════════════════════════════════════════════╗"))
+    console.log(chalk.hex("#FF00FF")("║       CANCEL NONCE - ASSAM TESTNET         ║"))
+    console.log(chalk.hex("#FF00FF")("╚════════════════════════════════════════════╝"))
+    console.log(chalk.hex("#00FFFF")("\n╔════════════════════════════════════════════╗"))
+    console.log(chalk.hex("#00FFFF")("║      AUTHOR : edosetiawan.eth              ║"))
+    console.log(chalk.hex("#00FFFF")("║      E-MAIL : edosetiawan.eth@gmail.com    ║"))
+    console.log(chalk.hex("#00FFFF")("║   INSTAGRAM : @edosetiawan.eth             ║"))
+    console.log(chalk.hex("#00FFFF")("║   TWITTER/X : @edosetiawan_eth             ║"))
+    console.log(chalk.hex("#00FFFF")("║      GITHUB : edosetiawan-xyz              ║"))
+    console.log(chalk.hex("#00FFFF")("║     DISCORD : edosetiawan.eth              ║"))
+    console.log(chalk.hex("#00FFFF")("╚════════════════════════════════════════════╝\n"))
+
+    // Pilih wallet untuk membatalkan nonce
+    console.log(chalk.hex("#FF00FF")("╔═════════════════════════╗"))
+    console.log(chalk.hex("#FF00FF")("║      PILIH WALLET       ║"))
+    console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
+
+    // Tampilkan daftar wallet
+    wallets.forEach((wallet, index) => {
+      console.log(chalk.hex("#00FFFF")(`[${index + 1}] ${wallet.address}`))
+    })
+    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+
+    // Pilih wallet
+    let selectedWallet
+    while (true) {
+      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih wallet (0-" + wallets.length + "): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+        return
+      }
+
+      if (!isNaN(choice) && choice > 0 && choice <= wallets.length) {
+        selectedWallet = wallets[choice - 1]
+        break
+      }
+
+      console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+
+    // Dapatkan nonce saat ini
+    const currentNonce = await provider.getTransactionCount(selectedWallet.address, "latest")
+    const pendingNonce = await provider.getTransactionCount(selectedWallet.address, "pending")
+
+    console.log(chalk.hex("#00FFFF")(`\n💼 Wallet: ${selectedWallet.address}`))
+    console.log(chalk.hex("#00FFFF")(`🔢 Nonce saat ini: ${currentNonce}`))
+    console.log(chalk.hex("#00FFFF")(`🔢 Nonce pending: ${pendingNonce}`))
+
+    if (pendingNonce <= currentNonce) {
+      console.log(chalk.hex("#00FF00")("\n✅ Tidak ada transaksi pending untuk dibatalkan!"))
+      readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+      return
+    }
+
+    // Tampilkan transaksi pending
+    console.log(chalk.hex("#FFFF00")(`\n⚠️ Terdapat ${pendingNonce - currentNonce} transaksi pending`))
+
+    // Pilih nonce untuk dibatalkan
+    console.log(chalk.hex("#FF00FF")("\n╔═════════════════════════╗"))
+    console.log(chalk.hex("#FF00FF")("║      PILIH NONCE        ║"))
+    console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
+
+    console.log(chalk.hex("#00FFFF")("[1] Batalkan semua nonce pending"))
+    console.log(chalk.hex("#00FFFF")("[2] Batalkan nonce tertentu"))
+    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+
+    const noncesToCancel = []
+    while (true) {
+      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih opsi (0-2): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+        return
+      }
+
+      if (choice === 1) {
+        // Batalkan semua nonce pending
+        for (let i = currentNonce; i < pendingNonce; i++) {
+          noncesToCancel.push(i)
+        }
+        break
+      } else if (choice === 2) {
+        // Batalkan nonce tertentu
+        const nonceInput = readline.question(
+          chalk.hex("#00FFFF")(`Masukkan nonce yang ingin dibatalkan (${currentNonce}-${pendingNonce - 1}): `),
+        )
+        const nonce = Number.parseInt(nonceInput)
+
+        if (!isNaN(nonce) && nonce >= currentNonce && nonce < pendingNonce) {
+          noncesToCancel.push(nonce)
+          break
+        }
+
+        console.log(chalk.hex("#FF3131")("❌ Nonce tidak valid! Silakan coba lagi."))
+        continue
+      }
+
+      console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+
+    // Konfirmasi pembatalan
+    console.log(
+      chalk.hex("#FFFF00")(`\n⚠️ Akan membatalkan ${noncesToCancel.length} nonce: ${noncesToCancel.join(", ")}`),
+    )
+    const confirm = readline.question(chalk.hex("#FFFF00")("Lanjutkan? (y/n): "))
+
+    if (confirm.toLowerCase() !== "y") {
+      console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+      readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+      return
+    }
+
+    // Dapatkan gas price saat ini
+    const currentGwei = await provider.getFeeData()
+    const gasPrice = ethers.formatUnits(currentGwei.gasPrice, "gwei")
+    console.log(chalk.hex("#00FFFF")(`\n⛽ Gas Price saat ini: ${gasPrice} Gwei`))
+
+    // Pilih gas price untuk pembatalan
+    const gasPriceInput = readline.question(
+      chalk.hex("#00FFFF")(
+        `Masukkan gas price untuk pembatalan (dalam Gwei, default: ${Math.ceil(Number.parseFloat(gasPrice) * 1.5)}): `,
+      ),
+    )
+    let cancelGasPrice = gasPriceInput ? Number.parseFloat(gasPriceInput) : Math.ceil(Number.parseFloat(gasPrice) * 1.5)
+
+    if (isNaN(cancelGasPrice) || cancelGasPrice <= 0) {
+      cancelGasPrice = Math.ceil(Number.parseFloat(gasPrice) * 1.5)
+    }
+
+    console.log(chalk.hex("#00FFFF")(`\n🚀 Membatalkan transaksi dengan gas price ${cancelGasPrice} Gwei...`))
+
+    // Proses pembatalan
+    let successCount = 0
+    let failCount = 0
+
+    for (const nonce of noncesToCancel) {
+      try {
+        console.log(chalk.hex("#FFFF00")(`\n⏳ Membatalkan nonce ${nonce}...`))
+
+        // Buat transaksi pembatalan (0 value ke diri sendiri dengan nonce yang sama)
+        const tx = {
+          to: selectedWallet.address,
+          value: 0n,
+          nonce: nonce,
+          gasPrice: ethers.parseUnits(cancelGasPrice.toString(), "gwei"),
+          gasLimit: 21000,
+        }
+
+        // Kirim transaksi
+        const response = await selectedWallet.sendTransaction(tx)
+        console.log(chalk.hex("#00FF00")(`✅ Transaksi pembatalan dikirim: ${response.hash}`))
+
+        // Tunggu konfirmasi
+        console.log(chalk.hex("#FFFF00")(`⏳ Menunggu konfirmasi...`))
+        const receipt = await response.wait()
+
+        if (receipt && receipt.status === 1) {
+          console.log(chalk.hex("#00FF00")(`✅ Transaksi dengan nonce ${nonce} berhasil dibatalkan!`))
+          successCount++
+
+          // Kirim notifikasi Telegram
+          const message =
+            `🚫 Nonce ${nonce} Dibatalkan\n` +
+            `👛 Wallet: ${selectedWallet.address}\n` +
+            `✅ Transaksi pembatalan: ${response.hash}\n` +
+            `⛽ Gas Price: ${cancelGasPrice} Gwei\n` +
+            `⏰ Waktu: ${new Date().toLocaleString()}`
+
+          await sendTelegramMessage(message, response.hash)
+        } else {
+          console.log(chalk.hex("#FF3131")(`❌ Pembatalan nonce ${nonce} gagal!`))
+          failCount++
+        }
+      } catch (error) {
+        console.log(chalk.hex("#FF3131")(`❌ Error saat membatalkan nonce ${nonce}: ${error.message}`))
+
+        // Jika error karena nonce sudah digunakan, anggap berhasil
+        if (error.message.includes("nonce has already been used")) {
+          console.log(chalk.hex("#00FF00")(`✅ Nonce ${nonce} sudah digunakan oleh transaksi lain.`))
+          successCount++
+        } else {
+          failCount++
+        }
+      }
+    }
+
+    // Tampilkan ringkasan
+    console.log(chalk.hex("#00FF00")("\n✅ Proses pembatalan nonce selesai!"))
+    console.log(chalk.hex("#00FF00")(`✅ Berhasil: ${successCount}`))
+    if (failCount > 0) {
+      console.log(chalk.hex("#FF3131")(`❌ Gagal: ${failCount}`))
+    }
+
+    // Kirim notifikasi ringkasan ke Telegram
+    const summaryMessage =
+      `📊 Ringkasan Pembatalan Nonce\n` +
+      `👛 Wallet: ${selectedWallet.address}\n` +
+      `✅ Berhasil: ${successCount}\n` +
+      `❌ Gagal: ${failCount}\n` +
+      `⏰ Waktu: ${new Date().toLocaleString()}`
+
+    await sendTelegramMessage(summaryMessage)
+
+    // Tunggu user sebelum kembali ke menu utama
+    readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+  } catch (error) {
+    logError("Cancel Nonce", error)
+    console.error(chalk.hex("#FF1493")(`❌ Error: ${error.message}`))
+    readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+  }
+}
+
 async function main() {
   console.clear()
   console.log(
@@ -512,6 +757,7 @@ async function main() {
     console.log(chalk.hex("#00FFFF")("║ [2] MeowTea Token - MTT ║"))
     console.log(chalk.hex("#00FFFF")("║ [3] TeaDogs INU - TDI   ║"))
     console.log(chalk.hex("#00FFFF")("║ [4] Kirim Token Manual  ║"))
+    console.log(chalk.hex("#00FFFF")("║ [5] Cancel Nonce        ║"))
     console.log(chalk.hex("#FF1493")("║ [0] CANCEL              ║"))
     console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
 
@@ -520,10 +766,11 @@ async function main() {
       console.log(chalk.hex("#00FFFF")(`[${index + 1}] ${token}`))
     })
     console.log(chalk.hex("#00FFFF")("[4] Kirim Token Manual"))
+    console.log(chalk.hex("#00FFFF")("[5] Cancel Nonce"))
     console.log(chalk.hex("#FF1493")("[0] CANCEL"))
 
     while (true) {
-      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih opsi (0-4): "))
+      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih opsi (0-5): "))
       const choice = Number.parseInt(input)
 
       if (input.trim() === "0") {
@@ -533,7 +780,17 @@ async function main() {
 
       let tokenSymbol, tokenAddress
 
-      if (choice === 4) {
+      if (choice === 5) {
+        // Fitur Cancel Nonce
+        await cancelNonce()
+        // Kembali ke menu utama setelah selesai
+        main().catch((err) => {
+          console.error(chalk.hex("#FF1493")(`❌ Error: ${err.message}`))
+          errorLogStream.end()
+          process.exit(1)
+        })
+        return
+      } else if (choice === 4) {
         // Kirim Token Manual
         tokenAddress = readline.question(chalk.hex("#00FFFF")("Masukkan alamat smart contract token: "))
         tokenSymbol = readline.question(chalk.hex("#00FFFF")("Masukkan simbol token: "))
@@ -740,5 +997,3 @@ console.log(
     chalk.bold.red("edosetiawan.eth") +
     chalk.yellowBright(" untuk validasi."),
 )
-
-
