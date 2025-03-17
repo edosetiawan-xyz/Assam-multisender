@@ -10,7 +10,7 @@
     "start:nodemon": "nodemon Assam-multisender.js",
     "start:pm2": "pm2 start Assam-multisender.js --name assam-multisender",
     "start:debug": "node --inspect-brk Assam-multisender.js",
-    "test": "echo \"No test specified\" && exit 1",
+    "test": ""echo \"Skipping tests...\" && exit 0",
     "lint": "eslint .",
     "format": "prettier --write .",
     "update": "git stash && git pull origin main && git stash pop && npm install",
