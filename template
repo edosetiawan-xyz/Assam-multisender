@@ -1,0 +1,923 @@
+#!/bin/bash
+# ╔════════════════════════════════════════════════════════════╗
+# ║                ENHANCED HACKER TERMINAL                    ║
+# ║              Tornadocash Kali Linux Edition                ║
+# ╚════════════════════════════════════════════════════════════╝
+
+# ===== ENVIRONMENT VARIABLES =====
+export EDITOR="nano"
+export VISUAL="nano"
+export HISTCONTROL=ignoreboth:erasedups
+export HISTSIZE=10000
+export HISTFILESIZE=10000
+export HISTTIMEFORMAT="%F %T "
+
+# Default cryptocurrency balances
+export BTC_BALANCE="1.2345"
+export ETH_BALANCE="15.7890"
+export TORN_BALANCE="2780.4182"
+
+# ===== SHELL OPTIONS =====
+shopt -s autocd histappend checkwinsize globstar cdspell
+
+# ===== NEON/CYBERPUNK COLORS =====
+# Non-printing character markers for PS1
+red='\[\033[1;91m\]'
+green='\[\033[1;92m\]'
+cyan='\[\033[1;96m\]'
+yellow='\[\033[1;93m\]'
+purple='\[\033[1;95m\]'
+blue='\[\033[1;94m\]'
+white='\[\033[1;97m\]'
+black='\[\033[1;30m\]'
+orange='\[\033[1;38;5;208m\]'
+pink='\[\033[1;38;5;219m\]'
+teal='\[\033[1;38;5;14m\]'
+lime='\[\033[1;38;5;10m\]'
+magenta='\[\033[1;35m\]'
+reset='\[\033[0m\]'
+bold='\[\033[1m\]'
+
+# Regular colors for echo commands
+RED='\033[1;91m'
+GREEN='\033[1;92m'
+CYAN='\033[1;96m'
+YELLOW='\033[1;93m'
+PURPLE='\033[1;95m'
+BLUE='\033[1;94m'
+WHITE='\033[1;97m'
+BLACK='\033[1;30m'
+ORANGE='\033[1;38;5;208m'
+PINK='\033[1;38;5;219m'
+TEAL='\033[1;38;5;14m'
+LIME='\033[1;38;5;10m'
+MAGENTA='\033[1;35m'
+RESET='\033[0m'
+BOLD='\033[1m'
+GRAY='\033[90m'
+
+# Array of colors for directory components
+dir_colors=(
+  "$yellow"
+  "$green"
+  "$blue"
+  "$purple"
+  "$orange"
+  "$pink"
+  "$teal"
+  "$lime"
+  "$magenta"
+  "$red"
+  "$cyan"
+)
+
+# ===== USEFUL ALIASES =====
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias update='apt update && apt upgrade -y'
+alias install='apt install'
+alias remove='apt remove'
+alias cls='clear'
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit -m'
+alias gp='git push'
+alias eth='curl -s https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd | grep -o "\"usd\":[0-9.]*" | cut -d":" -f2'
+
+# ===== USEFUL FUNCTIONS =====
+extract() {
+  if [ -f "$1" ] ; then
+    case "$1" in
+      *.tar.bz2)   tar xjf "$1"     ;;
+      *.tar.gz)    tar xzf "$1"     ;;
+      *.bz2)       bunzip2 "$1"     ;;
+      *.rar)       unrar e "$1"     ;;
+      *.gz)        gunzip "$1"      ;;
+      *.tar)       tar xf "$1"      ;;
+      *.tbz2)      tar xjf "$1"     ;;
+      *.tgz)       tar xzf "$1"     ;;
+      *.zip)       unzip "$1"       ;;
+      *.Z)         uncompress "$1"  ;;
+      *.7z)        7z x "$1"        ;;
+      *)           echo "'$1' cannot be extracted via extract()" ;;
+    esac
+  else
+    echo "'$1' is not a valid file"
+  fi
+}
+
+mkcd() {
+  mkdir -p "$1" && cd "$1"
+}
+
+weather() {
+  curl -s "wttr.in/${1:-}"
+}
+
+crypto() {
+  curl -s "https://api.coingecko.com/api/v3/simple/price?ids=$1&vs_currencies=usd" |
+  grep -o "\"usd\":[0-9.]*" | cut -d":" -f2
+}
+
+# ===== CUSTOM PROMPT FUNCTIONS =====
+# Function to get current directory path
+get_project_path() {
+  local current_dir="$PWD"
+  local home_dir="$HOME"
+
+  # Replace home directory with ~ if path starts with home
+  if [[ "$current_dir" == "$home_dir"* ]]; then
+      local relative_path="${current_dir#$home_dir}"
+
+      # If we're in home directory exactly
+      if [[ -z "$relative_path" ]]; then
+          echo "~"
+          return
+      fi
+
+      # Get the current directory structure
+      echo "~$relative_path"
+  else
+      # If not in home directory, show full path
+      echo "$current_dir"
+  fi
+}
+
+# Function to get the current directory name for the second line of prompt
+get_current_dir_name() {
+  local current_dir="$PWD"
+  local home_dir="$HOME"
+
+  # If in home directory exactly
+  if [[ "$current_dir" == "$home_dir" ]]; then
+      echo "~"
+      return
+  fi
+
+  # If in a subdirectory of home
+  if [[ "$current_dir" == "$home_dir"* ]]; then
+      local relative_path="${current_dir#$home_dir/}"
+
+      # Split path by / and get components
+      IFS='/' read -ra PATH_PARTS <<< "$relative_path"
+
+      # Return the first directory for the second line
+      if [[ ${#PATH_PARTS[@]} -gt 0 && -n "${PATH_PARTS[0]}" ]]; then
+          echo "${PATH_PARTS[0]}"
+      else
+          echo "~"
+      fi
+  else
+      # If not in home directory, show the basename
+      basename "$current_dir"
+  fi
+}
+
+# Function to get Git branch
+parse_git_branch() {
+  git branch 2> /dev/null | sed -n 's/^\* //p'
+}
+
+# Function to generate colored path for PS1
+generate_colored_path() {
+  local current_dir="$PWD"
+  local home_dir="$HOME"
+
+  # If in home directory exactly
+  if [[ "$current_dir" == "$home_dir" ]]; then
+      echo "${yellow}[~]"
+      return
+  fi
+
+  # If in a subdirectory of home
+  if [[ "$current_dir" == "$home_dir"* ]]; then
+      local relative_path="${current_dir#$home_dir/}"
+
+      # Split path by / and get components
+      IFS='/' read -ra PATH_PARTS <<< "$relative_path"
+
+      # Format the path with each directory component
+      local result=""
+
+      if [[ ${#PATH_PARTS[@]} -gt 0 ]]; then
+          # Start with the first directory
+          result="${yellow}[${PATH_PARTS[0]}]"
+
+          # Add remaining directories with ─ separator
+          if [[ ${#PATH_PARTS[@]} -gt 1 ]]; then
+              result+="${cyan}─${green}[${PATH_PARTS[1]}]"
+          fi
+
+          if [[ ${#PATH_PARTS[@]} -gt 2 ]]; then
+              result+="${cyan}─${blue}[${PATH_PARTS[2]}]"
+          fi
+
+          if [[ ${#PATH_PARTS[@]} -gt 3 ]]; then
+              result+="${cyan}─${purple}[${PATH_PARTS[3]}]"
+          fi
+
+          if [[ ${#PATH_PARTS[@]} -gt 4 ]]; then
+              result+="${cyan}─${orange}[${PATH_PARTS[4]}]"
+          fi
+
+          if [[ ${#PATH_PARTS[@]} -gt 5 ]]; then
+              result+="${cyan}─${pink}[${PATH_PARTS[5]}]"
+          fi
+
+          echo "$result"
+      else
+          echo "${yellow}[~]"
+      fi
+  else
+      # If not in home directory, format the absolute path
+      local path_parts=()
+      local current_path=""
+
+      # Split the path into components
+      IFS='/' read -ra path_parts <<< "$current_dir"
+
+      # Format the path with each directory component
+      local result=""
+
+      for ((i=1; i<${#path_parts[@]} && i<=6; i++)); do
+          if [[ -n "${path_parts[$i]}" ]]; then
+              case $i in
+                  1) result+="${yellow}[${path_parts[$i]}]" ;;
+                  2) result+="${cyan}─${green}[${path_parts[$i]}]" ;;
+                  3) result+="${cyan}─${blue}[${path_parts[$i]}]" ;;
+                  4) result+="${cyan}─${purple}[${path_parts[$i]}]" ;;
+                  5) result+="${cyan}─${orange}[${path_parts[$i]}]" ;;
+                  6) result+="${cyan}─${pink}[${path_parts[$i]}]" ;;
+              esac
+          fi
+      done
+
+      echo "$result"
+  fi
+}
+
+# Set the prompt with hardcoded colors for each directory level
+PROMPT_COMMAND='PS1="\n${cyan}┌─[${red}Tornadocash${cyan}]─[${green}Kali Linux${cyan}]─$(generate_colored_path)\n${cyan}├─[${purple}$(date +%H:%M)${cyan}]─[${blue}edosetiawan.eth${cyan}]\n${cyan}└─╼${red}⚡${reset} "'
+
+# ===== NEOFETCH CONFIGURATION =====
+# Daftar lengkap distro Neofetch
+distros=(
+"AIX" "Alpine" "Anarchy" "Android" "Antergos" "antiX"
+"AOSC OS/Retro" "Apricity" "ArcoLinux" "ArchBox" "ARCHlabs"
+"ArchStrike" "XFerience" "ArchMerge" "Arch" "Artix" "Arya"
+"Bitrig" "BlackArch" "BLAG" "BlankOn" "BlueLight" "bonsai"
+"BunsenLabs" "Calculate" "Carbs" "CentOS" "Chakra" "ChaletOS"
+"Chapeau" "Chrom*" "Cleanjaro" "ClearOS" "Clear_Linux" "Clonezilla"
+"Condres" "Container_Linux" "CRUX" "Cucumber" "Debian" "Deepin"
+"DesaOS" "Devuan" "DracOS" "DarkOs" "DragonFly" "Drauger"
+"EndeavourOS" "Endless" "EuroLinux" "Exherbo" "Fedora" "Feren"
+"FreeMiNT" "Frugalware" "Funtoo" "GalliumOS" "Garuda" "Gentoo"
+"gNewSense" "GNOME" "GNU" "GoboLinux" "Grombyang" "Guix" "Haiku"
+"Hyperbola" "janus" "Kali" "KaOS" "KDE_neon" "Kibojoe" "Kogaion"
+"Korora" "KSLinux" "Kubuntu" "LEDE" "LFS" "Linux_Lite" "LMDE"
+"Lubuntu" "Lunar" "macos" "Mageia" "MagpieOS" "Mandriva" "Manjaro"
+"Maui" "Mer" "Minix" "LinuxMint" "MX_Linux" "Namib" "Neptune"
+"NetBSD" "Netrunner" "Nitrux" "NixOS" "Nurunner" "NuTyX" "OBRevenge"
+"OpenBSD" "openEuler" "OpenIndiana" "openMandriva" "OpenStage" "OpenWrt"
+"osmc" "Oracle" "OS_Elbrus" "Parabola" "Pardus" "Parrot" "Parsix"
+"TrueOS" "PCLinuxOS" "popos" "Porteus" "PostMarketOS" "Proxmox"
+"Puppy" "PureOS" "Raspbian" "Reborn_OS" "Redstar" "Redcore" "Redhat"
+"Refracta" "Regata" "Rosa" "sabotage" "Sabayon" "Sailfish" "SalentOS"
+"Septor" "SereneLinux" "SharkLinux" "Siduction" "Slackware" "SmartOS"
+"Solus" "Source_Mage" "Sparky" "Star" "SteamOS" "SunOS" "openSUSE_Leap"
+"openSUSE_Tumbleweed" "openSUSE" "SwagArch" "Trisquel" "Ubuntu-Budgie"
+"Ubuntu-GNOME" "Ubuntu-MATE" "Ubuntu-Studio" "Ubuntu" "Venom" "Void"
+"Obarun" "windows10" "Windows7" "Xubuntu" "IRIX"
+)
+
+# ===== NEW FUNCTIONS =====
+
+# Display animated typing text
+type_text() {
+  local text="$1"
+  local color="$2"
+  local speed="${3:-0.03}"  # Default speed is 0.03, can be overridden
+
+  # Jika warna tidak diberikan, gunakan warna default
+  if [ -z "$color" ]; then
+    color=$RESET
+  fi
+
+  for (( i=0; i<${#text}; i++ )); do
+    echo -n -e "${color}${text:$i:1}${RESET}"
+    sleep $speed
+  done
+  echo ""
+}
+
+# Display glitched text
+glitch_text() {
+  local text="$1"
+  local glitch_chars=('!' '@' '#' '$' '%' '&' '*' '+' '=' '?' '/' '\\' '|')
+
+  for (( i=0; i<${#text}; i++ )); do
+    if [ $((RANDOM % 10)) -eq 0 ]; then
+      local glitch=${glitch_chars[$RANDOM % ${#glitch_chars[@]}]}
+      echo -n "${RED}${glitch}${RESET}"
+    else
+      echo -n "${text:$i:1}"
+    fi
+    sleep 0.02
+  done
+  echo ""
+}
+
+# Generate a random IPv4 address
+generate_random_ipv4() {
+  echo "$((RANDOM % 256)).$((RANDOM % 256)).$((RANDOM % 256)).$((RANDOM % 256))"
+}
+
+# Generate a random local IPv4 address
+generate_random_local_ipv4() {
+  local first_octet
+  local rand=$((RANDOM % 3))
+  local second_octet=0
+
+  case $rand in
+    0) first_octet=10 ;;
+    1) first_octet=172; second_octet=$((16 + RANDOM % 16)) ;;
+    2) first_octet=192; second_octet=168 ;;
+  esac
+
+  if [ $rand -eq 1 ]; then
+    echo "$first_octet.$second_octet.$((RANDOM % 256)).$((RANDOM % 256))"
+  else
+    echo "$first_octet.$((RANDOM % 256)).$((RANDOM % 256)).$((RANDOM % 256))"
+  fi
+}
+
+# Generate a random number of connections
+generate_random_connections() {
+  echo "$((1000 + RANDOM % 9000))"
+}
+
+# Helper function to display price changes with colors
+display_change() {
+  local change=$1
+
+  if (( $(echo "$change > 0" | bc -l) )); then
+    echo -e "${GREEN}(↑ $change%)${RESET}"
+  elif (( $(echo "$change < 0" | bc -l) )); then
+    echo -e "${RED}(↓ $change%)${RESET}"
+  else
+    echo -e "${YELLOW}(0%)${RESET}"
+  fi
+}
+
+# Check if internet connection is available
+check_internet_connection() {
+  if ping -c 1 8.8.8.8 &> /dev/null; then
+    return 0  # Online
+  else
+    return 1  # Offline
+  fi
+}
+
+# Global variables for cryptocurrency prices and changes
+BTC_PRICE=0
+ETH_PRICE=0
+TORN_PRICE=0
+BTC_CHANGE=0
+ETH_CHANGE=0
+TORN_CHANGE=0
+
+# Function to update cryptocurrency prices
+update_crypto_prices() {
+  # Fetch real-time prices from CoinGecko API
+  local crypto_data=$(curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tornado-cash&vs_currencies=usd&include_24hr_change=true")
+
+  # Extract prices and changes
+  BTC_PRICE=$(echo $crypto_data | grep -o '"bitcoin":{"usd":[0-9.]*' | grep -o '[0-9.]*$')
+  ETH_PRICE=$(echo $crypto_data | grep -o '"ethereum":{"usd":[0-9.]*' | grep -o '[0-9.]*$')
+  TORN_PRICE=$(echo $crypto_data | grep -o '"tornado-cash":{"usd":[0-9.]*' | grep -o '[0-9.]*$')
+
+  BTC_CHANGE=$(echo $crypto_data | grep -o '"bitcoin":{"usd":[0-9.]*,"usd_24h_change":[0-9.-]*' | grep -o 'usd_24h_change":[0-9.-]*' | grep -o '[0-9.-]*$')
+  ETH_CHANGE=$(echo $crypto_data | grep -o '"ethereum":{"usd":[0-9.]*,"usd_24h_change":[0-9.-]*' | grep -o 'usd_24h_change":[0-9.-]*' | grep -o '[0-9.-]*$')
+  TORN_CHANGE=$(echo $crypto_data | grep -o '"tornado-cash":{"usd":[0-9.]*,"usd_24h_change":[0-9.-]*' | grep -o 'usd_24h_change":[0-9.-]*' | grep -o '[0-9.-]*$')
+
+  # If API fails, use previous values or set to 0
+  BTC_PRICE=${BTC_PRICE:-$BTC_PRICE}
+  ETH_PRICE=${ETH_PRICE:-$ETH_PRICE}
+  TORN_PRICE=${TORN_PRICE:-$TORN_PRICE}
+  BTC_CHANGE=${BTC_CHANGE:-$BTC_CHANGE}
+  ETH_CHANGE=${ETH_CHANGE:-$ETH_CHANGE}
+  TORN_CHANGE=${TORN_CHANGE:-$TORN_CHANGE}
+}
+
+# Display cryptocurrency prices with real-time data and balance
+crypto_prices() {
+  echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════╗${RESET}"
+  echo -e "${CYAN}║ ${YELLOW}CRYPTOCURRENCY PRICES                                                                    ${CYAN}║${RESET}"
+  echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════╝${RESET}"
+
+  # Update prices
+  update_crypto_prices
+
+  # Display prices with color-coded changes
+  echo -e "${YELLOW}[*] Bitcoin (BTC): ${GREEN}$BTC_PRICE USD ${RESET}$(display_change $BTC_CHANGE)"
+  echo -e "${YELLOW}[*] Ethereum (ETH): ${GREEN}$ETH_PRICE USD ${RESET}$(display_change $ETH_CHANGE)"
+  echo -e "${YELLOW}[*] Tornadocash (TORN): ${GREEN}$TORN_PRICE USD ${RESET}$(display_change $TORN_CHANGE)"
+
+  # Hitung nilai USD dari balance
+  local btc_value=$(echo "$BTC_BALANCE * $BTC_PRICE" | bc -l)
+  local eth_value=$(echo "$ETH_BALANCE * $ETH_PRICE" | bc -l)
+  local torn_value=$(echo "$TORN_BALANCE * $TORN_PRICE" | bc -l)
+  local total_value=$(echo "$btc_value + $eth_value + $torn_value" | bc -l)
+
+  # Format nilai USD (2 desimal)
+  btc_value=$(printf "%.2f" $btc_value)
+  eth_value=$(printf "%.2f" $eth_value)
+  torn_value=$(printf "%.2f" $torn_value)
+  total_value=$(printf "%.2f" $total_value)
+
+  # Tampilkan balance dengan warna
+  echo -e "${YELLOW}[•] Balance (BTC):${GREEN}$BTC_BALANCE BTC ${WHITE}≈ ${ORANGE}$btc_value USD${RESET}"
+  echo -e "${YELLOW}[•] Balance (ETH):${GREEN}$ETH_BALANCE ETH ${WHITE}≈ ${ORANGE}$eth_value USD${RESET}"
+  echo -e "${YELLOW}[•] Balance (TORN): ${GREEN}$TORN_BALANCE TORN ${WHITE}≈ ${ORANGE}$torn_value USD${RESET}"
+  echo -e "${PURPLE}[+] Total Value: ${CYAN}$total_value USD${RESET}"
+  echo -e "${PURPLE}[+] Last updated: ${CYAN}$(date '+%Y-%m-%d %H:%M:%S')${RESET}"
+}
+
+# Display network information with fake data
+network_info() {
+  echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════════════════╗${RESET}"
+  echo -e "${CYAN}║ ${YELLOW}NETWORK STATUS                                                                           ${CYAN}║${RESET}"
+  echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════════════════╝${RESET}"
+
+  # Generate fake data
+  local local_ip=$(generate_random_local_ipv4)
+  local public_ip=$(generate_random_ipv4)
+  local gateway=$(generate_random_local_ipv4)
+  local dns_servers=$(generate_random_ipv4)
+  local active_connections=$(generate_random_connections)
+
+  # Check internet connection
+  if check_internet_connection; then
+    connection_status="${GREEN}ONLINE${RESET}"
+    connection_icon="${GREEN}●${RESET}"
+  else
+    connection_status="${RED}OFFLINE${RESET}"
+    connection_icon="${RED}●${RESET}"
+  fi
+
+  # Display network information dengan warna yang berbeda
+  echo -e "${LIME}[+] Connection Status: ${connection_status} ${connection_icon}${RESET}"
+  echo -e "${LIME}[+] Local IP: ${ORANGE}$local_ip${RESET}"
+  echo -e "${TEAL}[+] Public IP: ${PINK}$public_ip${RESET}"
+  echo -e "${MAGENTA}[+] Gateway: ${BLUE}$gateway${RESET}"
+  echo -e "${PURPLE}[+] DNS Server: ${CYAN}$dns_servers${RESET}"
+  echo -e "${GREEN}[+] Active Connections: ${ORANGE}$active_connections${RESET}"
+  echo -e "${PURPLE}[+] Last updated: ${CYAN}$(date '+%Y-%m-%d %H:%M:%S')${RESET}"
+}
+
+# Display random distro info
+show_random_distro() {
+  if command -v neofetch &> /dev/null; then
+    random_distro=${distros[$RANDOM % ${#distros[@]}]}
+    neofetch --ascii_distro "$random_distro"
+  else
+    echo -e "${YELLOW}Neofetch not found. Install with: pkg install neofetch${RESET}"
+  fi
+}
+
+# Display hacker quotes
+hacker_quotes() {
+  local quotes=(
+    "The quieter you become, the more you can hear."
+    "Privacy is not for the passive."
+    "To iterate is human, to recurse divine."
+    "There is no security on this earth, only opportunity."
+    "The only truly secure system is one that is powered off."
+    "If you think technology can solve your security problems, then you don't understand the problems and you don't understand the technology."
+    "Encryption works. Properly implemented strong crypto systems are one of the few things that you can rely on."
+    "Security is always excessive until it's not enough."
+    "The best place to hide something is in plain sight."
+    "Every lock can be picked."
+    "In a world full of ASIC's, be a GPU."
+    "Code is poetry written in logic."
+    "Blockchain: Trust through transparency."
+    "Not your keys, not your coins."
+    "HODL: Hold On for Dear Life."
+    "In cryptography we trust."
+    "The Internet treats censorship as damage and routes around it."
+    "Given enough eyeballs, all bugs are shallow."
+    "Talk is cheap. Show me the code."
+    "First, solve the problem. Then, write the code."
+    "Programming isn't about what you know; it's about what you can figure out."
+    "The best way to predict the future is to invent it."
+    "Simplicity is the soul of efficiency."
+    "Make it work, make it right, make it fast."
+    "Premature optimization is the root of all evil."
+    "The function of good software is to make the complex appear to be simple."
+    "Any sufficiently advanced technology is indistinguishable from magic."
+    "Hardware eventually fails. Software eventually works."
+    "If debugging is the process of removing software bugs, then programming must be the process of putting them in."
+    "It's not a bug – it's an undocumented feature."
+    "There are 10 types of people in the world: those who understand binary, and those who don't."
+    "Why do programmers prefer dark mode? Because light attracts bugs."
+    "Bitcoin is not just a currency. It's a way of thinking about the democratization of money."
+    "DeFi is not just a product. It's a movement towards financial inclusion."
+    "Smart contracts are neither smart nor contracts. Discuss."
+    "Web3 is not just a technology, it's a philosophy of decentralization."
+    "In the world of crypto, patience is not just a virtue, it's a strategy."
+    "The blockchain is an incorruptible digital ledger of economic transactions that can be programmed to record not just financial transactions but virtually everything of value."
+    "Decentralization is not a binary state. It's a spectrum."
+    "The beauty of cryptocurrency is that it's organic. It's not controlled by any one entity."
+    "NFTs are changing the way we think about digital ownership and scarcity."
+    "In the metaverse, we are all creators."
+    "The internet of money should be developed with the same principles as the internet itself: decentralized, open & permissionless."
+    "Crypto is not just an investment, it's a bet on the future of finance."
+    "DAOs are redefining organizational structures for the digital age."
+    "In a world of infinite digital replication, NFTs introduce scarcity."
+    "Yield farming: Where DeFi meets agriculture."
+    "Gas fees: The toll roads of the Ethereum network."
+    "Smart contracts are only as smart as their creators."
+    "In blockchain we trust, but we still verify."
+    "The metaverse: Where reality is what you code it to be."
+    "Tornado Cash: The eye of the privacy storm."
+    "Mixing isn't just for DJs anymore."
+    "Privacy is a fundamental human right, even in the digital realm."
+    "In the world of crypto, Tornado Cash is the ultimate umbrella."
+    "Tornado Cash: Where your transactions go to get a fresh start."
+    "Privacy on the blockchain: It's not about having something to hide, it's about having nothing to reveal."
+    "Tornado Cash: The digital equivalent of cash in the crypto world."
+    "In a sea of transparency, Tornado Cash is the island of privacy."
+    "Tornado Cash: Stirring up the waters of financial privacy."
+    "When it comes to financial privacy, Tornado Cash is the perfect storm."
+    "Tornado Cash: Because your transaction history is nobody's business but your own."
+    "In the fight for financial privacy, Tornado Cash is our shield."
+    "Tornado Cash: Turning the tide on blockchain surveillance."
+    "Privacy is the default, not the exception - Tornado Cash makes it possible."
+    "Tornado Cash: Where your crypto goes in dirty and comes out clean."
+    "In a world of open books, Tornado Cash offers a blank page."
+    "Tornado Cash: The ultimate mixer for the privacy-conscious."
+    "When they say 'follow the money', Tornado Cash says 'good luck'."
+    "Tornado Cash: Because financial privacy shouldn't be a luxury."
+    "In the crypto space, Tornado Cash is the ultimate invisibility cloak."
+    "Tornado Cash: Stirring up a revolution in financial privacy."
+    "The future of finance is decentralized, transparent, and unstoppable."
+    "Code is law in the blockchain universe."
+    "Privacy coins: The digital equivalent of cash in your pocket."
+    "Zero-knowledge proofs: Proving you know something without revealing what you know."
+    "Cryptography is the art of creating problems that only you can solve."
+    "The best privacy tech is the one that doesn't require trust."
+    "In the world of blockchain, trust is established through mathematics, not institutions."
+    "Financial sovereignty is a fundamental right in the digital age."
+    "The most powerful force in the universe is compound interest... and blockchain."
+    "Decentralization is not just a technical choice, it's a philosophical stance."
+    "The best way to predict the future of money is to build it."
+    "Censorship resistance is the killer feature of blockchain technology."
+    "True innovation happens at the edges, not the center."
+    "The revolution will not be centralized."
+    "Blockchain: Where code meets economics."
+    "The internet connected information. Blockchain connects value."
+    "Immutability: What's written to the blockchain stays on the blockchain."
+    "Cryptographic primitives are the building blocks of digital freedom."
+    "The most valuable resource in the digital age is not oil, but data privacy."
+    "Tornado Cash: The digital equivalent of washing your tracks in a river."
+    "Mixers don't create privacy; they restore the privacy that should have existed in the first place."
+    "Financial surveillance is the enemy of innovation."
+    "True privacy requires both technical solutions and social awareness."
+    "The right to transact privately is as fundamental as the right to free speech."
+    "Privacy is not about hiding something bad, it's about protecting something good."
+    "Financial privacy is the cornerstone of personal liberty in the digital age."
+    "Tornado Cash: Because your financial history shouldn't be an open book."
+    "The most powerful form of resistance is the one that cannot be detected."
+    "In a surveillance economy, privacy tools are acts of rebellion."
+    "Anonymity sets: The more participants, the stronger the privacy."
+    "True privacy requires constant vigilance and innovation."
+    "The battle for privacy is the battle for human dignity in the digital realm."
+    "Tornado Cash: Bringing fungibility back to cryptocurrency."
+    "Privacy is not a feature, it's a fundamental property of sound money."
+    "The right to financial privacy extends to the blockchain."
+    "Decentralized privacy: No single point of failure, no single point of control."
+    "The cost of privacy is eternal vigilance."
+    "Tornado Cash: Where your transaction history gets a fresh start."
+    "In the age of digital surveillance, privacy tools are essential infrastructure."
+    "The value of privacy increases as surveillance becomes more pervasive."
+    "Tornado Cash: Because your spending habits are nobody's business."
+    "Privacy by design, not as an afterthought."
+  )
+
+  local quote=${quotes[$RANDOM % ${#quotes[@]}]}
+  # Tampilkan kutipan dengan efek animasi
+  type_text "$quote" "$CYAN" "0.01"
+}
+
+# Display ASCII art banner with typing effect
+show_banner() {
+  echo -e "${GREEN}"
+  # ASCII art banner exactly as specified
+  echo "████████╗ ██████╗ ██████╗ ███╗   ██╗ █████╗ ██████╗  ██████╗  ██████╗ █████╗ ███████╗██╗  ██╗"
+  echo "╚══██╔══╝██╔═══██╗██╔══██╗████╗  ██║██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔══██╗██╔════╝██║  ██║"
+  echo "   ██║   ██║   ██║██████╔╝██╔██╗ ██║███████║██║  ██║██║   ██║██║     ███████║███████╗███████║"
+  echo "   ██║   ██║   ██║██╔══██╗██║╚██╗██║██╔══██║██║  ██║██║   ██║██║     ██╔══██║╚════██║██╔══██║"
+  echo "   ██║   ╚██████╔╝██║  ██║██║ ╚████║██║  ██║██████╔╝╚██████╔╝╚██████╗██║  ██║███████║██║  ██║"
+  echo "   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝"
+  echo -e "${RESET}"
+}
+
+# ===== STARTUP SEQUENCE =====
+run_startup() {
+  clear
+
+  show_banner
+  echo ""
+
+  hacker_quotes
+  echo ""
+
+  # Animasi loading yang lebih cepat dan smooth dengan warna yang berubah
+  echo -ne "${GREEN}🔌 Connecting to Tornadocash Network...${RESET}\n"
+  dots=50
+  for i in {1..100}; do
+    sleep 0.05
+    completed=$((i * dots / 100))
+    remaining=$((dots - completed))
+
+    # Gradien warna dari merah ke hijau
+    if [ $i -lt 33 ]; then
+      color=$RED
+    elif [ $i -lt 66 ]; then
+      color=$YELLOW
+    else
+      color=$GREEN
+    fi
+
+    # Perbaikan progress bar dengan dots yang benar
+    completed_dots=$(printf "%${completed}s" | sed "s/ /●/g")
+    remaining_dots=$(printf "%${remaining}s" | sed "s/ /./g")
+
+    printf "\r[${color}${completed_dots}${RESET}${GRAY}${remaining_dots}${RESET}] %d%%" $i
+
+    # Tambahkan pesan acak saat loading
+    if [ $((i % 20)) -eq 0 ]; then
+      messages=(
+        # Pesan Keamanan
+        "Encrypting connection with military-grade AES-256..."
+        "Routing traffic through Tor network onion layers..."
+        "Establishing secure channel with zero-knowledge proof..."
+        "Implementing quantum-resistant encryption protocols..."
+        "Deploying advanced firewall countermeasures..."
+        "Scanning for potential surveillance endpoints..."
+        "Activating multi-layer VPN tunneling..."
+        "Bypassing deep packet inspection systems..."
+        "Implementing perfect forward secrecy..."
+        "Hardening network against side-channel attacks..."
+        "Deploying honeypot detection algorithms..."
+        "Analyzing network traffic patterns for anomalies..."
+        "Deploying intrusion detection systems..."
+        "Implementing anti-forensic countermeasures..."
+        "Hardening system against timing attacks..."
+
+        # Pesan Blockchain/Web3
+        "Verifying blockchain integrity across distributed nodes..."
+        "Checking smart contract status and security audits..."
+        "Initializing privacy protocols for zero-knowledge transactions..."
+        "Connecting to decentralized nodes across 5 continents..."
+        "Verifying cryptographic signatures with elliptic curves..."
+        "Establishing P2P connections with trusted relayers..."
+        "Loading privacy mixers for transaction anonymization..."
+        "Syncing with latest Ethereum mempool data..."
+        "Analyzing gas optimization for upcoming transactions..."
+        "Validating merkle proofs for transaction inclusion..."
+        "Initializing zk-SNARK verification circuits..."
+        "Preparing secure relayer infrastructure..."
+        "Checking Tornado Cash pool liquidity status..."
+        "Validating smart contract bytecode integrity..."
+        "Analyzing EVM execution traces for vulnerabilities..."
+        "Optimizing cross-chain bridge security protocols..."
+        "Verifying consensus mechanism integrity..."
+        "Analyzing token economics for sustainability..."
+
+        # Pesan Programmer/Coding
+        "Executing advanced penetration testing protocols..."
+        "Compiling zero-day exploit countermeasures..."
+        "Running code obfuscation routines..."
+        "Implementing polymorphic encryption layers..."
+        "Executing memory-safe runtime environment..."
+        "Optimizing cryptographic hash functions..."
+        "Implementing secure multi-party computation..."
+        "Executing sandboxed environment for untrusted code..."
+        "Implementing secure coding practices..."
+        "Deploying canary values for buffer overflow protection..."
+        "Running static code analysis for vulnerabilities..."
+        "Optimizing algorithmic complexity for critical paths..."
+        "Refactoring codebase for improved maintainability..."
+        "Implementing design patterns for scalable architecture..."
+        "Deploying continuous integration pipelines..."
+        "Analyzing code coverage metrics for test suite..."
+        "Optimizing database query performance..."
+        "Implementing functional programming paradigms..."
+
+        # Pesan AI/Machine Learning
+        "Training neural networks for anomaly detection..."
+        "Implementing federated learning for privacy preservation..."
+        "Optimizing transformer models for NLP tasks..."
+        "Deploying reinforcement learning agents for security..."
+        "Analyzing data patterns with unsupervised learning..."
+        "Implementing differential privacy for dataset protection..."
+        "Training generative adversarial networks for simulation..."
+        "Optimizing convolutional neural networks for image analysis..."
+        "Implementing recurrent neural networks for sequence prediction..."
+        "Deploying ensemble methods for improved accuracy..."
+        "Analyzing feature importance with explainable AI..."
+        "Implementing transfer learning for domain adaptation..."
+        "Optimizing hyperparameters with Bayesian optimization..."
+        "Deploying AI agents for automated threat detection..."
+        "Implementing quantum machine learning algorithms..."
+
+        # Pesan Cyberpunk/Futuristic
+        "Initializing neural cryptography interface..."
+        "Bypassing corporate surveillance grid..."
+        "Accessing darknet secure channels..."
+        "Deploying digital ghost protocol..."
+        "Establishing connection to shadow network..."
+        "Activating cybernetic defense systems..."
+        "Implementing digital consciousness firewall..."
+        "Bypassing biometric security measures..."
+        "Accessing quantum encryption mainframe..."
+        "Deploying digital phantom protocol..."
+        "Hacking the mainframe with custom exploits..."
+        "Bypassing neural firewalls with thought-injection..."
+        "Deploying holographic decoy systems..."
+        "Activating nano-scale encryption modules..."
+        "Implementing reality distortion protocols..."
+      )
+      rand_msg=${messages[$RANDOM % ${#messages[@]}]}
+      printf "\n${color}%s${RESET}\n" "$rand_msg"
+    fi
+  done
+
+  echo -e "\n\n${GREEN}✅ Connected to Tornadocash Network!${RESET}\n"
+
+  # Tampilkan informasi distro acak dengan neofetch
+  show_random_distro
+  echo ""
+
+  # Tambahkan informasi koneksi IPFS
+  echo -e "${CYAN}🌐 Node IPFS Tornadocash berhasil dihubungkan — Jaringan pribadi aman dan terenkripsi (AES-256 | Peer-to-Peer Protocol)${RESET}"
+  echo -e "${GREEN}================================================================================================"
+  echo -e "${YELLOW}🔥 Powered by Advanced Penetration Testing${RESET}"
+  echo -e "${PURPLE}📦 Web3 Security | 💻 Blockchain Forensics${RESET}"
+  echo -e "${CYAN}⚡ Cryptographic Analysis | 🌐 DeFi Security Auditing${RESET}"
+
+  echo -e "${LIME}[SYSTEM INFO]${RESET}"
+  echo -e "${TEAL}Date: ${RESET}$(date)"
+  echo -e "${PINK}Uptime: ${RESET}$(uptime -p)"
+  echo -e "${ORANGE}Memory: ${RESET}$(free -h | awk '/^Mem/ {print $3 " used of " $2}')"
+  echo -e "${MAGENTA}Storage: ${RESET}$(df -h | awk '$NF=="/" {print $3 " used of " $2}')"
+
+  echo ""
+
+  # Tampilkan informasi cryptocurrency
+  crypto_prices
+  echo ""
+
+  # Tampilkan informasi jaringan
+  network_info
+  echo ""
+
+  # Tampilkan pesan akhir
+  echo -e "${GREEN}Type 'help' for available commands${RESET}"
+}
+
+# Display all information with auto-update
+display_all() {
+  while true; do
+    clear
+
+    show_banner
+    echo ""
+
+    hacker_quotes
+    echo ""
+
+    # Connection animation with progress bar and color-changing dots
+    echo -ne "${GREEN}🔌 Establishing Secure Connection to Tornadocash Network...${RESET}\n"
+    dots=50
+    for i in {1..100}; do
+      sleep 0.05
+      completed=$((i * dots / 100))
+      remaining=$((dots - completed))
+
+      # Perbaikan progress bar dengan dots yang benar
+      completed_dots=$(printf "%${completed}s" | sed "s/ /●/g")
+      remaining_dots=$(printf "%${remaining}s" | sed "s/ /./g")
+
+      # Gradien warna dari merah ke hijau
+      if [ $i -lt 33 ]; then
+        color=$RED
+      elif [ $i -lt 66 ]; then
+        color=$YELLOW
+      else
+        color=$GREEN
+      fi
+
+      printf "\r[${color}${completed_dots}${RESET}${GRAY}${remaining_dots}${RESET}] %d%%" $i
+    done
+    echo -e "\n${GREEN}Connection Established!${RESET}\n"
+
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${GREEN}║ ${WHITE}🌐 TORNADOCASH PRIVATE NETWORK CONNECTION STATUS${GREEN} ●●●●●                                            ${GREEN}║${RESET}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝${RESET}"
+
+    # Check internet connection
+    if check_internet_connection; then
+      connection_status="${GREEN}ONLINE${RESET}"
+      connection_icon="${GREEN}●${RESET}"
+    else
+      connection_status="${RED}OFFLINE${RESET}"
+      connection_icon="${RED}●${RESET}"
+    fi
+
+    echo -e "${BLUE}🌍 ${GREEN}[${CYAN}Connected to IPFS${GREEN}]${YELLOW} Tornadocash Private Network Activated ${connection_icon}${RESET}"
+    echo -e "${PURPLE}🛡️  Encryption Protocol: ${WHITE}AES-256${RESET}"
+    echo -e "${CYAN}⚡ Network Status: ${connection_status}${RESET}"
+
+    # Tampilkan informasi distro acak dengan neofetch
+    show_random_distro
+
+    # Tambahkan informasi koneksi IPFS
+    echo -e "${CYAN}🌐 Node IPFS Tornadocash berhasil dihubungkan — Jaringan pribadi aman dan terenkripsi (AES-256 | Peer-to-Peer Protocol)${RESET}"
+    echo -e "${GREEN}========================================================================================================"
+    echo -e "${YELLOW}🔥 Powered by Advanced Penetration Testing${RESET}"
+    echo -e "${PURPLE}📦 Web3 Security | 💻 Blockchain Forensics${RESET}"
+    echo -e "${CYAN}⚡ Cryptographic Analysis | 🌐 DeFi Security Auditing${RESET}"
+    echo -e "${LIME}[SYSTEM INFO]${RESET}"
+    echo -e "${TEAL}Date: ${RESET}$(date)"
+    echo -e "${PINK}Uptime: ${RESET}$(uptime -p)"
+    echo -e "${ORANGE}Memory: ${RESET}$(free -h | awk '/^Mem/ {print $3 " used of " $2}')"
+    echo -e "${MAGENTA}Storage: ${RESET}$(df -h | awk '$NF=="/" {print $3 " used of " $2}')"
+
+    echo ""
+
+    crypto_prices
+
+    echo ""
+
+    network_info
+
+    echo ""
+
+    echo -e "${YELLOW}[*] Auto-updating every 1 second. Press Ctrl+C to exit.${RESET}"
+    sleep 1
+  done
+}
+
+# Run startup only in interactive shells and once per session
+if [[ $- == *i* ]] && [ -z "$STARTUP_DONE" ]; then
+  export STARTUP_DONE=1
+  run_startup
+fi
+
+# ===== COMMAND COMPLETION =====
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+# ===== CUSTOM COMMANDS =====
+help() {
+  echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════════════════╗${RESET}"
+  echo -e "${CYAN}║ ${YELLOW}AVAILABLE COMMANDS                                                                                ${CYAN}║${RESET}"
+  echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝${RESET}"
+
+  echo -e "${YELLOW}extract ${RESET}- Extract various archive formats"
+  echo -e "${YELLOW}mkcd ${RESET}- Create a directory and cd into it"
+  echo -e "${YELLOW}weather ${RESET}- Check weather for a location"
+  echo -e "${YELLOW}crypto ${RESET}- Check cryptocurrency prices"
+  echo -e "${YELLOW}eth ${RESET}- Check Ethereum price"
+  echo -e "${YELLOW}crypto_prices ${RESET}- Display cryptocurrency prices and balance"
+  echo -e "${YELLOW}network_info ${RESET}- Display network information"
+  echo -e "${YELLOW}display_all ${RESET}- Display all information with auto-update"
+  echo -e "${YELLOW}show_random_distro ${RESET}- Display random distro information"
+  echo -e "${YELLOW}hacker_quotes ${RESET}- Display random hacker/crypto quotes"
+  echo -e "\n${CYAN}For more information on standard commands, use 'man <command>'${RESET}"
+}
+
+# Add aliases
+alias crypto='crypto_prices'
+alias netinfo='network_info'
+alias monitor='display_all'
+alias balance='crypto_prices'
+alias distro='show_random_distro'
+alias quotes='hacker_quotes'
+
+# If script is run directly, start the display
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  display_all
+fi
+
+cd ~/edosetiawan.eth
