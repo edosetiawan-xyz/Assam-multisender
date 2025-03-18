@@ -4,31 +4,22 @@ import readline from "readline-sync"
 import chalk from "chalk"
 import { ethers } from "ethers"
 import dotenv from "dotenv"
-import { createWriteStream } from "fs"
 
 dotenv.config()
-
-// Setup error logging
-const errorLogStream = createWriteStream("error_log.txt", { flags: "a" })
 
 // Konfigurasi provider dan wallet
 const RPC_URLS = process.env.RPC_URLS ? process.env.RPC_URLS.split(",") : [process.env.RPC_URL]
 let currentRpcIndex = 0
 
+// Tracking nonce yang sudah digunakan dalam session ini
+const usedNonces = new Set()
+// Tracking transaksi pending
+const pendingTransactions = new Map() // txHash -> {timestamp, nonce, recipient}
+// Waktu maksimum transaksi pending (dalam detik) sebelum dianggap stuck
+const MAX_PENDING_TIME = 180 // 3 menit
+
 function logError(context, error, additionalInfo = {}) {
   const timestamp = new Date().toISOString()
-  const errorLog = {
-    timestamp,
-    context,
-    error: {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-    },
-    additionalInfo,
-  }
-
-  errorLogStream.write(`${JSON.stringify(errorLog, null, 2)}\n---\n`)
   console.log(chalk.hex("#FF3131")(`❌ Error in ${context}: ${error.message}`))
 }
 
@@ -102,6 +93,231 @@ async function sendTelegramMessage(message, txHash = null) {
   }
 }
 
+// Fungsi untuk mendapatkan nonce yang valid dan belum digunakan
+async function getValidNonce(wallet, forceRefresh = false) {
+  try {
+    // Selalu dapatkan nonce terbaru dari network jika forceRefresh = true
+    const currentNonce = forceRefresh
+      ? await provider.getTransactionCount(wallet.address, "pending")
+      : await provider.getTransactionCount(wallet.address, "pending")
+
+    // Cek apakah nonce sudah digunakan dalam session ini
+    let nonce = currentNonce
+    while (usedNonces.has(nonce)) {
+      nonce++
+    }
+
+    return nonce
+  } catch (error) {
+    logError("Get Valid Nonce", error)
+    // Jika gagal mendapatkan nonce, coba dengan provider lain
+    provider = getNextProvider()
+    const newWallet = new ethers.Wallet(wallet.privateKey, provider)
+    return await getValidNonce(newWallet, true)
+  }
+}
+
+// Fungsi untuk memeriksa network congestion
+async function checkNetworkCongestion() {
+  try {
+    const feeData = await provider.getFeeData()
+
+    // Jika menggunakan EIP-1559
+    if (feeData.maxFeePerGas) {
+      // Hitung rasio maxPriorityFeePerGas terhadap baseFee
+      const baseFee = feeData.lastBaseFeePerGas || BigInt(0)
+      const priorityFee = feeData.maxPriorityFeePerGas || BigInt(0)
+
+      if (baseFee === BigInt(0)) return { congested: false, level: 0 }
+
+      const ratio = Number((priorityFee * BigInt(100)) / baseFee)
+
+      // Tentukan level congestion
+      if (ratio > 50) return { congested: true, level: 3 } // Sangat padat
+      if (ratio > 30) return { congested: true, level: 2 } // Padat
+      if (ratio > 15) return { congested: true, level: 1 } // Sedikit padat
+      return { congested: false, level: 0 } // Normal
+    }
+    // Jika tidak menggunakan EIP-1559
+    else {
+      // Gunakan gas price sebagai indikator
+      const gasPrice = feeData.gasPrice || BigInt(0)
+      const gasPriceGwei = Number(ethers.formatUnits(gasPrice, "gwei"))
+
+      // Threshold bisa disesuaikan berdasarkan jaringan
+      if (gasPriceGwei > 100) return { congested: true, level: 3 }
+      if (gasPriceGwei > 50) return { congested: true, level: 2 }
+      if (gasPriceGwei > 20) return { congested: true, level: 1 }
+      return { congested: false, level: 0 }
+    }
+  } catch (error) {
+    logError("Check Network Congestion", error)
+    return { congested: false, level: 0 } // Default jika error
+  }
+}
+
+// Fungsi untuk menghitung gas parameters berdasarkan kondisi jaringan
+async function calculateGasParameters(increasePercentage = 0) {
+  try {
+    const feeData = await provider.getFeeData()
+    const congestion = await checkNetworkCongestion()
+
+    // Tambahkan persentase berdasarkan congestion level
+    let totalIncrease = increasePercentage
+    if (congestion.congested) {
+      const congestionIncrease = [10, 20, 40][congestion.level - 1] || 0
+      totalIncrease += congestionIncrease
+      console.log(
+        chalk.hex("#FFFF00")(`⚠️ Jaringan padat (level ${congestion.level}), menambah gas +${congestionIncrease}%`),
+      )
+    }
+
+    const multiplier = 1 + totalIncrease / 100
+
+    // Jika mendukung EIP-1559
+    if (feeData.maxFeePerGas) {
+      const maxPriorityFeePerGas = BigInt(Math.floor(Number(feeData.maxPriorityFeePerGas) * multiplier))
+      const maxFeePerGas = feeData.lastBaseFeePerGas
+        ? BigInt(Math.floor(Number(feeData.lastBaseFeePerGas) * 2)) + maxPriorityFeePerGas
+        : BigInt(Math.floor(Number(feeData.maxFeePerGas) * multiplier))
+
+      return {
+        type: 2, // EIP-1559
+        maxPriorityFeePerGas,
+        maxFeePerGas,
+        supportsEIP1559: true,
+      }
+    }
+    // Jika tidak mendukung EIP-1559
+    else {
+      return {
+        type: 0, // Legacy
+        gasPrice: BigInt(Math.floor(Number(feeData.gasPrice) * multiplier)),
+        supportsEIP1559: false,
+      }
+    }
+  } catch (error) {
+    logError("Calculate Gas Parameters", error)
+    // Fallback ke provider lain jika error
+    provider = getNextProvider()
+    return calculateGasParameters(increasePercentage)
+  }
+}
+
+// Fungsi untuk memeriksa transaksi yang stuck
+async function checkStuckTransactions(wallet) {
+  const now = Date.now()
+  const stuckTxs = []
+
+  for (const [txHash, txInfo] of pendingTransactions.entries()) {
+    // Jika transaksi sudah pending lebih dari MAX_PENDING_TIME
+    if (now - txInfo.timestamp > MAX_PENDING_TIME * 1000) {
+      try {
+        // Cek status transaksi
+        const tx = await provider.getTransaction(txHash)
+
+        // Jika transaksi masih pending (belum di-mine)
+        if (tx && !tx.blockNumber) {
+          stuckTxs.push({
+            hash: txHash,
+            nonce: txInfo.nonce,
+            recipient: txInfo.recipient,
+          })
+        }
+        // Jika transaksi sudah selesai atau tidak ditemukan, hapus dari tracking
+        else {
+          pendingTransactions.delete(txHash)
+        }
+      } catch (error) {
+        // Jika error saat mengecek transaksi, anggap masih pending
+        logError(`Check Tx ${txHash}`, error)
+      }
+    }
+  }
+
+  // Jika ada transaksi yang stuck, coba cancel
+  if (stuckTxs.length > 0) {
+    console.log(chalk.hex("#FFFF00")(`⚠️ Ditemukan ${stuckTxs.length} transaksi stuck, mencoba cancel...`))
+
+    for (const stuckTx of stuckTxs) {
+      await cancelStuckTransaction(wallet, stuckTx)
+    }
+  }
+
+  return stuckTxs.length > 0
+}
+
+// Fungsi untuk membatalkan transaksi yang stuck
+async function cancelStuckTransaction(wallet, stuckTx) {
+  try {
+    console.log(chalk.hex("#FFFF00")(`⏳ Membatalkan transaksi stuck: ${stuckTx.hash} (nonce: ${stuckTx.nonce})`))
+
+    // Dapatkan gas parameters dengan peningkatan 50% untuk memastikan cancel berhasil
+    const gasParams = await calculateGasParameters(50)
+
+    // Buat transaksi 0 value ke diri sendiri dengan nonce yang sama
+    const tx = {
+      to: wallet.address,
+      value: 0n,
+      nonce: stuckTx.nonce,
+      ...(gasParams.supportsEIP1559
+        ? {
+            type: 2,
+            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+            maxFeePerGas: gasParams.maxFeePerGas,
+          }
+        : {
+            gasPrice: gasParams.gasPrice,
+          }),
+      gasLimit: 21000,
+    }
+
+    // Kirim transaksi cancel
+    const response = await wallet.sendTransaction(tx)
+    console.log(chalk.hex("#00FF00")(`✅ Transaksi cancel dikirim: ${response.hash}`))
+
+    // Tunggu konfirmasi
+    const receipt = await response.wait()
+
+    if (receipt && receipt.status === 1) {
+      console.log(chalk.hex("#00FF00")(`✅ Transaksi dengan nonce ${stuckTx.nonce} berhasil dibatalkan!`))
+      pendingTransactions.delete(stuckTx.hash)
+
+      // Kirim notifikasi Telegram
+      const message =
+        `🚫 Transaksi Stuck Dibatalkan\n` +
+        `👛 Wallet: ${wallet.address}\n` +
+        `🔢 Nonce: ${stuckTx.nonce}\n` +
+        `🏷️ Transaksi asli: ${stuckTx.hash}\n` +
+        `✅ Transaksi pembatalan: ${response.hash}\n` +
+        `⏰ Waktu: ${new Date().toLocaleString()}`
+
+      await sendTelegramMessage(message, response.hash)
+      return true
+    }
+
+    return false
+  } catch (error) {
+    logError("Cancel Stuck Transaction", error)
+    return false
+  }
+}
+
+// Fungsi untuk estimasi gas limit
+async function estimateGasLimit(tokenContract, recipient, amountInWei) {
+  try {
+    // Estimasi gas untuk transaksi token
+    const gasEstimate = await tokenContract.transfer.estimateGas(recipient, amountInWei)
+
+    // Tambahkan buffer 20% untuk keamanan
+    return BigInt(Math.floor(Number(gasEstimate) * 1.2))
+  } catch (error) {
+    logError("Estimate Gas", error)
+    // Fallback ke gas limit default jika estimasi gagal
+    return 100000n
+  }
+}
+
 async function sendTransactionWithRetry(
   wallet,
   tokenAddress,
@@ -110,11 +326,19 @@ async function sendTransactionWithRetry(
   tokenSymbol,
   currentIndex,
   totalTx,
-  nonce,
+  suggestedNonce = null,
   maxRetries = 5,
 ) {
   let retries = 0
-  const delay = 1000
+  const baseDelay = 1000
+  let nonce = suggestedNonce !== null ? suggestedNonce : await getValidNonce(wallet)
+  let lastError = null
+
+  // Cek dan tangani transaksi yang stuck sebelum mengirim yang baru
+  await checkStuckTransactions(wallet)
+
+  // Daftar persentase kenaikan gas untuk setiap percobaan
+  const gasIncreasePercentages = [0, 10, 20, 30, 40]
 
   while (retries < maxRetries) {
     try {
@@ -141,15 +365,74 @@ async function sendTransactionWithRetry(
           chalk.hex("#00FFFF")("edosetiawan.eth"),
       )
 
-      const tx = await tokenContract.transfer(recipient, amountInWei, {
+      // Cek apakah nonce sudah digunakan dalam session ini
+      if (usedNonces.has(nonce)) {
+        console.log(
+          chalk.hex("#FFFF00")(`⚠️ Nonce ${nonce} sudah digunakan dalam session ini, mendapatkan nonce baru...`),
+        )
+        nonce = await getValidNonce(wallet, true)
+        console.log(chalk.hex("#00FFFF")(`🔢 Nonce baru: ${nonce}`))
+      }
+
+      // Tandai nonce sebagai digunakan
+      usedNonces.add(nonce)
+
+      // Hitung gas parameters untuk percobaan ini
+      const increasePercentage = gasIncreasePercentages[Math.min(retries, gasIncreasePercentages.length - 1)]
+      const gasParams = await calculateGasParameters(increasePercentage)
+
+      // Estimasi gas limit
+      const gasLimit = await estimateGasLimit(tokenContract, recipient, amountInWei)
+
+      // Log informasi gas
+      if (gasParams.supportsEIP1559) {
+        console.log(
+          chalk.hex("#FFFF00")(
+            `⛽ EIP-1559: maxPriorityFee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, ` +
+              `maxFee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei ` +
+              `(${increasePercentage > 0 ? `+${increasePercentage}%` : "normal"})`,
+          ),
+        )
+      } else {
+        console.log(
+          chalk.hex("#FFFF00")(
+            `⛽ Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei ` +
+              `(${increasePercentage > 0 ? `+${increasePercentage}%` : "normal"})`,
+          ),
+        )
+      }
+
+      console.log(chalk.hex("#FFFF00")(`🔢 Menggunakan nonce: ${nonce}, Gas Limit: ${gasLimit}`))
+
+      // Buat transaksi dengan parameter gas yang sesuai
+      const txOptions = {
         nonce,
-        gasLimit: 100000,
-      })
+        gasLimit,
+        ...(gasParams.supportsEIP1559
+          ? {
+              type: 2,
+              maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+              maxFeePerGas: gasParams.maxFeePerGas,
+            }
+          : {
+              gasPrice: gasParams.gasPrice,
+            }),
+      }
+
+      const tx = await tokenContract.transfer(recipient, amountInWei, txOptions)
 
       console.log(chalk.hex("#00FF00")(`✅ Transaksi dikirim: ${tx.hash}`))
 
-      const currentGwei = await provider.getFeeData()
-      const estimatedTime = await estimateTransactionTime(currentGwei.gasPrice)
+      // Tambahkan ke daftar transaksi pending
+      pendingTransactions.set(tx.hash, {
+        timestamp: Date.now(),
+        nonce,
+        recipient,
+      })
+
+      const estimatedTime = await estimateTransactionTime(
+        gasParams.supportsEIP1559 ? gasParams.maxFeePerGas : gasParams.gasPrice,
+      )
 
       const timestamp = new Date()
       const formattedTimestamp = `${timestamp.getDate()} ${timestamp.toLocaleString("default", { month: "long" })} ${timestamp.getFullYear()} ${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()}`
@@ -159,36 +442,81 @@ async function sendTransactionWithRetry(
         `• felicia (${currentIndex + 1}/${totalTx}) edosetiawan.eth\n` +
         `✅ Transaksi dikirim: ${tx.hash}\n` +
         `⏱️ Estimasi waktu: ${estimatedTime}\n` +
-        `⛽ Gas Price: ${ethers.formatUnits(currentGwei.gasPrice, "gwei")} Gwei\n` +
+        `⛽ ${
+          gasParams.supportsEIP1559
+            ? `Max Priority Fee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, Max Fee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei`
+            : `Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei`
+        }\n` +
         `⏰ Waktu transaksi: ${formattedTimestamp}`
 
       await sendTelegramMessage(message, tx.hash)
       console.log(chalk.hex("#00FFFF")(message))
 
       const receipt = await tx.wait()
-      return "SUKSES"
-    } catch (error) {
-      logError("Transaction", error, {
-        attempt: retries + 1,
-        recipient,
-        amount,
-        tokenSymbol,
-        nonce,
-      })
 
-      if (error.message.includes("insufficient funds")) {
+      // Hapus dari daftar transaksi pending
+      pendingTransactions.delete(tx.hash)
+
+      return "SUKSES"
+    } catch (err) {
+      lastError = err
+      logError("Transaction", err)
+
+      if (err.message.includes("insufficient funds")) {
         console.log(chalk.hex("#FF3131")("❌ Dana tidak mencukupi! Membatalkan transaksi."))
+        // Hapus nonce dari daftar yang digunakan karena transaksi gagal
+        usedNonces.delete(nonce)
         return "GAGAL"
+      }
+
+      // Cek apakah error terkait nonce
+      if (
+        err.message.includes("nonce too low") ||
+        err.message.includes("already known") ||
+        err.message.includes("replacement transaction underpriced") ||
+        err.message.includes("nonce has already been used")
+      ) {
+        console.log(chalk.hex("#FFFF00")("⚠️ Nonce conflict detected. Getting new nonce..."))
+        // Hapus nonce lama dari daftar yang digunakan
+        usedNonces.delete(nonce)
+        // Dapatkan nonce baru yang lebih tinggi
+        nonce = await getValidNonce(wallet, true)
+        console.log(chalk.hex("#00FFFF")(`🔢 Nonce baru: ${nonce}`))
+      }
+      // Cek apakah error terkait gas price
+      else if (
+        err.message.includes("gas price too low") ||
+        err.message.includes("max fee per gas less than block base fee") ||
+        err.message.includes("transaction underpriced") ||
+        err.message.includes("fee cap less than block base fee")
+      ) {
+        console.log(chalk.hex("#FFFF00")("⚠️ Gas price terlalu rendah. Meningkatkan gas price..."))
+        // Tidak perlu mengubah nonce karena transaksi dengan nonce ini belum masuk ke blockchain
+      }
+      // Error lainnya
+      else {
+        // Hapus nonce dari daftar yang digunakan untuk error yang tidak terkait nonce
+        usedNonces.delete(nonce)
       }
 
       retries++
       if (retries < maxRetries) {
-        const waitTime = Math.min(delay * Math.pow(2, retries), 30000)
-        console.log(chalk.hex("#FFFF00")(`⏳ Menunggu ${waitTime / 1000} detik sebelum mencoba lagi...`))
+        const waitTime = Math.min(baseDelay * Math.pow(2, retries), 30000)
+        console.log(
+          chalk.hex("#FFFF00")(
+            `⏳ Menunggu ${waitTime / 1000} detik sebelum mencoba lagi (Percobaan ${retries + 1}/${maxRetries})...`,
+          ),
+        )
         await new Promise((resolve) => setTimeout(resolve, waitTime))
       }
     }
   }
+
+  console.log(
+    chalk.hex("#FF3131")(`❌ Gagal setelah ${maxRetries} percobaan: ${lastError?.message || "Unknown error"}`),
+  )
+  // Hapus nonce dari daftar yang digunakan karena semua percobaan gagal
+  usedNonces.delete(nonce)
   return "GAGAL"
 }
 
@@ -373,29 +701,6 @@ function setTelegramDelay() {
   }
 }
 
-function loadPreviousReports() {
-  const successfulTransactions = new Set()
-  const failedTransactions = new Set()
-
-  if (fs.existsSync("Laporan transaksi sukses.txt")) {
-    const successData = fs.readFileSync("Laporan transaksi sukses.txt", "utf8").trim().split("\n")
-    successData.slice(1).forEach((line) => {
-      const [address] = line.split(",")
-      successfulTransactions.add(address)
-    })
-  }
-
-  if (fs.existsSync("Laporan Transaksi gagal.txt")) {
-    const failData = fs.readFileSync("Laporan Transaksi gagal.txt", "utf8").trim().split("\n")
-    failData.slice(1).forEach((line) => {
-      const [address] = line.split(",")
-      failedTransactions.add(address)
-    })
-  }
-
-  return { successfulTransactions, failedTransactions }
-}
-
 function saveCheckpoint(index) {
   fs.writeFileSync("checkpoint.txt", index.toString())
 }
@@ -406,14 +711,6 @@ function loadCheckpoint() {
     return Number.parseInt(checkpoint)
   }
   return 0
-}
-
-function saveSuccessfulTransaction(address, amount) {
-  fs.appendFileSync("Laporan transaksi sukses.txt", `${address},${amount},SUKSES\n`)
-}
-
-function saveFailedTransaction(address, amount) {
-  fs.appendFileSync("Laporan Transaksi gagal.txt", `${address},${amount},GAGAL\n`)
 }
 
 async function checkTeaBalance(address) {
@@ -610,24 +907,18 @@ async function cancelNonce() {
       return
     }
 
-    // Dapatkan gas price saat ini
-    const currentGwei = await provider.getFeeData()
-    const gasPrice = ethers.formatUnits(currentGwei.gasPrice, "gwei")
-    console.log(chalk.hex("#00FFFF")(`\n⛽ Gas Price saat ini: ${gasPrice} Gwei`))
+    // Dapatkan gas parameters
+    const gasParams = await calculateGasParameters(50) // 50% lebih tinggi untuk memastikan cancel berhasil
 
-    // Pilih gas price untuk pembatalan
-    const gasPriceInput = readline.question(
+    console.log(
       chalk.hex("#00FFFF")(
-        `Masukkan gas price untuk pembatalan (dalam Gwei, default: ${Math.ceil(Number.parseFloat(gasPrice) * 1.5)}): `,
+        `\n🚀 Membatalkan transaksi dengan ${
+          gasParams.supportsEIP1559
+            ? `maxPriorityFee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, maxFee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei`
+            : `Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei`
+        }...`,
       ),
     )
-    let cancelGasPrice = gasPriceInput ? Number.parseFloat(gasPriceInput) : Math.ceil(Number.parseFloat(gasPrice) * 1.5)
-
-    if (isNaN(cancelGasPrice) || cancelGasPrice <= 0) {
-      cancelGasPrice = Math.ceil(Number.parseFloat(gasPrice) * 1.5)
-    }
-
-    console.log(chalk.hex("#00FFFF")(`\n🚀 Membatalkan transaksi dengan gas price ${cancelGasPrice} Gwei...`))
 
     // Proses pembatalan
     let successCount = 0
@@ -642,7 +933,15 @@ async function cancelNonce() {
           to: selectedWallet.address,
           value: 0n,
           nonce: nonce,
-          gasPrice: ethers.parseUnits(cancelGasPrice.toString(), "gwei"),
+          ...(gasParams.supportsEIP1559
+            ? {
+                type: 2,
+                maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+                maxFeePerGas: gasParams.maxFeePerGas,
+              }
+            : {
+                gasPrice: gasParams.gasPrice,
+              }),
           gasLimit: 21000,
         }
 
@@ -663,7 +962,11 @@ async function cancelNonce() {
             `🚫 Nonce ${nonce} Dibatalkan\n` +
             `👛 Wallet: ${selectedWallet.address}\n` +
             `✅ Transaksi pembatalan: ${response.hash}\n` +
-            `⛽ Gas Price: ${cancelGasPrice} Gwei\n` +
+            `⛽ ${
+              gasParams.supportsEIP1559
+                ? `Max Priority Fee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, Max Fee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei`
+                : `Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei`
+            }\n` +
             `⏰ Waktu: ${new Date().toLocaleString()}`
 
           await sendTelegramMessage(message, response.hash)
@@ -786,7 +1089,6 @@ async function main() {
         // Kembali ke menu utama setelah selesai
         main().catch((err) => {
           console.error(chalk.hex("#FF1493")(`❌ Error: ${err.message}`))
-          errorLogStream.end()
           process.exit(1)
         })
         return
@@ -824,10 +1126,31 @@ async function main() {
       const teaBalance = await checkTeaBalance(wallet.address)
       console.log(chalk.hex("#00FFFF")(`💰 Saldo $TEA: ${teaBalance} TEA`))
 
-      const currentGwei = await provider.getFeeData()
-      console.log(
-        chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(currentGwei.gasPrice, "gwei")} Gwei`),
-      )
+      // Cek apakah jaringan mendukung EIP-1559
+      const feeData = await provider.getFeeData()
+      const supportsEIP1559 = !!feeData.maxFeePerGas
+      console.log(chalk.hex("#00FFFF")(`🔧 Jaringan ${supportsEIP1559 ? "mendukung" : "tidak mendukung"} EIP-1559`))
+
+      if (supportsEIP1559) {
+        console.log(
+          chalk.hex("#00FFFF")(
+            `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
+              `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
+          ),
+        )
+      } else {
+        console.log(chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`))
+      }
+
+      // Cek network congestion
+      const congestion = await checkNetworkCongestion()
+      if (congestion.congested) {
+        console.log(
+          chalk.hex("#FFFF00")(
+            `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
+          ),
+        )
+      }
 
       const retryCount = chooseRetryCount()
       const delayChoice = chooseTransactionDelay()
@@ -868,11 +1191,17 @@ async function main() {
       let reportData = "Address,Amount,Status\n"
 
       const totalTx = data.length
-      let nonce = await provider.getTransactionCount(wallet.address)
 
-      // Memuat laporan transaksi sebelumnya
-      const { successfulTransactions, failedTransactions } = loadPreviousReports()
+      // Memuat checkpoint
       const checkpoint = loadCheckpoint()
+
+      // Dapatkan nonce awal
+      let nonce = await getValidNonce(wallet, true)
+      console.log(chalk.hex("#00FFFF")(`🔢 Nonce awal: ${nonce}`))
+
+      // Inisialisasi daftar transaksi yang berhasil dan gagal untuk session ini
+      const sessionSuccessful = new Set()
+      const sessionFailed = new Set()
 
       for (let i = checkpoint; i < totalTx; i += batchSize) {
         const batch = data.slice(i, i + batchSize)
@@ -884,15 +1213,21 @@ async function main() {
             return
           }
 
-          // Cek apakah transaksi sudah dilakukan sebelumnya
-          if (successfulTransactions.has(address)) {
-            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah sukses sebelumnya. Dilewati.`))
+          // Cek apakah transaksi sudah dilakukan dalam session ini
+          if (sessionSuccessful.has(address)) {
+            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah sukses dalam session ini. Dilewati.`))
             return
           }
-          if (failedTransactions.has(address)) {
-            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah gagal sebelumnya. Dilewati.`))
+          if (sessionFailed.has(address)) {
+            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah gagal dalam session ini. Dilewati.`))
             return
           }
+
+          // Dapatkan nonce baru untuk setiap transaksi
+          const txNonce = nonce + index
+
+          // Cek dan tangani transaksi yang stuck sebelum mengirim yang baru
+          await checkStuckTransactions(wallet)
 
           const result = await sendTransactionWithRetry(
             wallet,
@@ -902,27 +1237,34 @@ async function main() {
             tokenSymbol,
             i + index,
             totalTx,
-            nonce + index,
+            txNonce,
             retryCount,
           )
 
           if (result === "SUKSES") {
             successCount++
-            saveSuccessfulTransaction(address, amount)
+            sessionSuccessful.add(address)
             reportData += `${address},${amount},SUKSES\n`
           } else {
             failCount++
-            saveFailedTransaction(address, amount)
+            sessionFailed.add(address)
             reportData += `${address},${amount},GAGAL\n`
           }
         })
 
         await Promise.all(promises)
         nonce += batch.length
+
+        // Dapatkan nonce terbaru setelah setiap batch untuk memastikan sinkronisasi
+        if (i + batchSize < totalTx) {
+          nonce = await getValidNonce(wallet, true)
+          console.log(chalk.hex("#00FFFF")(`🔢 Nonce terbaru: ${nonce}`))
+        }
+
         saveCheckpoint(i + batchSize) // Simpan checkpoint setelah setiap batch
         console.log(
           chalk.hex("#00FFFF")(
-            `🚀 Progress: ${chalk.hex("#FF00FF")(`${i + 1}/${totalTx}`)} (${Math.round(((i + 1) / totalTx) * 100)}%)`,
+            `🚀 Progress: ${chalk.hex("#FF00FF")(`${Math.min(i + batchSize, totalTx)}/${totalTx}`)} (${Math.round((Math.min(i + batchSize, totalTx) / totalTx) * 100)}%)`,
           ),
         )
 
@@ -936,18 +1278,37 @@ async function main() {
           console.log(chalk.hex("#00FFFF")(`💰 Saldo $TEA terbaru: ${updatedTeaBalance} TEA`))
         }
 
-        // Tampilkan gas price terbaru setiap 5 transaksi
+        // Tampilkan gas price terbaru dan cek network congestion setiap 5 transaksi
         if ((i + 1) % 5 === 0) {
-          const currentGwei = await provider.getFeeData()
-          console.log(
-            chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(currentGwei.gasPrice, "gwei")} Gwei`),
-          )
+          const feeData = await provider.getFeeData()
+          if (feeData.maxFeePerGas) {
+            console.log(
+              chalk.hex("#00FFFF")(
+                `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
+                  `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
+              ),
+            )
+          } else {
+            console.log(
+              chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`),
+            )
+          }
+
+          // Cek network congestion
+          const congestion = await checkNetworkCongestion()
+          if (congestion.congested) {
+            console.log(
+              chalk.hex("#FFFF00")(
+                `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
+              ),
+            )
+          }
         }
       }
 
       console.log(chalk.hex("#00FF00")("\n✅ Semua transaksi selesai!\n"))
 
-      const finalReport = `✅ Laporan Transaksi:\nSukses: ${successCount}\nGagal: ${failCount}`
+      const finalReport = `✅ Laporan Transaksi:\\nSukses: ${successCount}\\nGagal: ${failCount}`
       await sendTelegramMessage(finalReport)
       console.log(chalk.hex("#FF00FF")(finalReport))
 
@@ -958,42 +1319,37 @@ async function main() {
   } catch (error) {
     logError("Main Execution", error)
     console.error(chalk.hex("#FF1493")(`❌ Error: ${error.message}`))
-  } finally {
-    errorLogStream.end()
   }
 }
 
 process.on("SIGINT", () => {
   console.log(chalk.hex("#FFFF00")("\n\n⚠️ Program dihentikan oleh user."))
-  errorLogStream.end()
   process.exit(0)
 })
 
 main().catch((err) => {
   console.error(chalk.hex("#FF1493")(`❌ Error: ${err.message}`))
-  errorLogStream.end()
   process.exit(1)
 })
 
-console.log(chalk.hex("#FF00FF")("✨ Script optimized token transfer has been executed."))
-console.log(chalk.greenBright("✨")) // Menampilkan emoji ✨ dengan warna hijau terang
-console.log(chalk.greenBright("=========================================="))
-console.log(chalk.bold.green("        ⚠️  PERINGATAN HAK CIPTA ⚠️        "))
-console.log(chalk.greenBright("=========================================="))
+console.log(chalk.hex("#FF00FF")("✨ Script optimized token transfer has been executed."));
+console.log(chalk.greenBright("✨")); // Menampilkan emoji ✨ dengan warna hijau terang
+console.log(chalk.greenBright("================================================================================================"));
+console.log(chalk.bold.green("        ⚠️  PERINGATAN HAK CIPTA ⚠️        "));
+console.log(chalk.greenBright("================================================================================================"));
 console.log(
   chalk.redBright.bold("DILARANG KERAS ") +
-    chalk.redBright("menyalin, mendistribusikan, atau menggunakan kode dalam script ini tanpa izin dari ") +
-    chalk.bold.green("edosetiawan.eth") +
-    chalk.redBright(". Segala bentuk duplikasi tanpa izin akan dianggap sebagai pelanggaran hak cipta."),
-)
-
-console.log("\n" + chalk.greenBright("=========================================="))
-console.log(chalk.bold.green("        ✅ PENGGUNAAN RESMI ✅        "))
-console.log(chalk.greenBright("=========================================="))
+  chalk.redBright("menyalin, mendistribusikan, atau menggunakan kode dalamscript ini tanpa izin dari ") +
+  chalk.bold.green("edosetiawan.eth") +
+  chalk.redBright(" Segala bentuk duplikasi tanpa izin akan dianggap sebagai pelanggaran hak cipta")
+);
+console.log(chalk.greenBright("================================================================================================"));
+console.log(chalk.bold.green("        ✅ PENGGUNAAN RESMI ✅        "));
+console.log(chalk.greenBright("================================================================================================"));
 console.log(
   chalk.yellowBright(
-    "Script ini hanya boleh digunakan oleh pemilik resmi yang telah diberikan akses. Jika Anda mendapatkan script ini dari sumber tidak resmi, harap segera menghubungi ",
+    "Script ini hanya boleh digunakan oleh pemilik resmi yang telah diberikan akses. Jika Anda bukan pengguna resmi, segera hubungi "
   ) +
-    chalk.bold.red("edosetiawan.eth") +
-    chalk.yellowBright(" untuk validasi."),
-)
+  chalk.bold.red("edosetiawan.eth") +
+  chalk.yellowBright(" untuk validasi.")
+);
