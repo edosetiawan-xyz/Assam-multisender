@@ -357,15 +357,15 @@ echo "address,amount
 
 ```shellscript
 # Di Linux/Mac/VPS
-unzip felicia_extracted.zip -d data_felicia
-mv data_felicia/*.csv .
+unzip Address.zip -d data_Address
+mv data_Address/*.csv .
 
 # Di Windows
 # Gunakan File Explorer untuk mengekstrak, atau
 # Gunakan 7-Zip, WinRAR, atau utilitas ekstraksi lainnya
 
 # Di Termux
-unzip felicia_extracted.zip
+unzip Address.zip
 ```
 ![Perhatian](https://img.shields.io/badge/📌%20Perhatian-Pastikan%20file%20CSV%20sudah%20tersedia%20serta%20WinRAR%20atau%20utilitas%20ekstraksi%20lainnya-FF0000?style=for-the-badge&logo=exclamation&logoColor=white)
 
