@@ -2,25 +2,145 @@ import fs from "fs"
 import path from "path"
 import readline from "readline-sync"
 import chalk from "chalk"
+import gradient from "gradient-string"
+import chalkAnimation from "chalk-animation"
 import { ethers } from "ethers"
 import dotenv from "dotenv"
 
 dotenv.config()
 
-// Konfigurasi provider dan wallet
+function getRandomColor() {
+  const brightColors = [
+    '#FF5555', '#FF79C6', '#BD93F9', '#FFB86C', '#F1FA8C', 
+    '#50FA7B', '#8BE9FD', '#FF92DF', '#FF6E6E', '#00FFFF',
+    '#FF00FF', '#FFFF00', '#00FF00', '#FF3131', '#FF7F00', 
+    '#7FFFD4', '#FF6347', '#FFA500', '#FFD700', '#ADFF2F',
+    '#00FF7F', '#00FFFF', '#1E90FF', '#FF1493', '#FF00FF'
+  ];
+  
+  return brightColors[Math.floor(Math.random() * brightColors.length)];
+}
+
+function createRandomGradient() {
+  return gradient([getRandomColor(), getRandomColor(), getRandomColor()]);
+}
+
+const gradients = {
+  purpleToBlue: gradient([getRandomColor(), getRandomColor()]),
+  redToYellow: gradient([getRandomColor(), getRandomColor()]),
+  blueToGreen: gradient([getRandomColor(), getRandomColor()]),
+  rainbowGradient: gradient([
+    getRandomColor(), getRandomColor(), getRandomColor(), 
+    getRandomColor(), getRandomColor(), getRandomColor()
+  ]),
+  purpleToPink: gradient([getRandomColor(), getRandomColor()]),
+  blueToCyan: gradient([getRandomColor(), getRandomColor()]),
+  redToOrange: gradient([getRandomColor(), getRandomColor()]),
+  greenToYellow: gradient([getRandomColor(), getRandomColor()]),
+  orangeToPurple: gradient([getRandomColor(), getRandomColor()]),
+  cyanToGreen: gradient([getRandomColor(), getRandomColor()]),
+  pinkToBlue: gradient([getRandomColor(), getRandomColor()]),
+  yellowToRed: gradient([getRandomColor(), getRandomColor()]),
+  magentaToCyan: gradient([getRandomColor(), getRandomColor()]),
+  goldToSilver: gradient([getRandomColor(), getRandomColor()]),
+  tealToLime: gradient([getRandomColor(), getRandomColor()]),
+  pinkToOrange: gradient([getRandomColor(), getRandomColor()]),
+  blueToViolet: gradient([getRandomColor(), getRandomColor()]),
+  greenToCyan: gradient([getRandomColor(), getRandomColor()]),
+  redToPurple: gradient([getRandomColor(), getRandomColor()]),
+  menuGradient: gradient([getRandomColor(), getRandomColor(), getRandomColor()]),
+  headerGradient: gradient([getRandomColor(), getRandomColor(), getRandomColor()]),
+  footerGradient: gradient([getRandomColor(), getRandomColor(), getRandomColor()]),
+  titleGradient: gradient([getRandomColor(), getRandomColor(), getRandomColor()]),
+  optionGradient: gradient([getRandomColor(), getRandomColor()]),
+  warningGradient: gradient(['#FF0000', '#FF8800']),
+  successGradient: gradient(['#00FF00', '#00FFFF']),
+  infoGradient: gradient([getRandomColor(), getRandomColor()]),
+}
+
+function getRandomGradient() {
+  const gradientKeys = Object.keys(gradients);
+  const randomKey = gradientKeys[Math.floor(Math.random() * gradientKeys.length)];
+  return gradients[randomKey];
+}
+
+function refreshGradients() {
+  const brightColors = [
+    '#FF5555', '#FF79C6', '#BD93F9', '#FFB86C', '#F1FA8C', 
+    '#50FA7B', '#8BE9FD', '#FF92DF', '#FF6E6E', '#00FFFF',
+    '#FF00FF', '#FFFF00', '#00FF00', '#FF3131', '#FF7F00', 
+    '#7FFFD4', '#FF6347', '#FFA500', '#FFD700', '#ADFF2F',
+    '#00FF7F', '#00FFFF', '#1E90FF', '#FF1493', '#FF00FF'
+  ];
+  
+  const shuffledColors = [...brightColors].sort(() => Math.random() - 0.5);
+  
+  Object.keys(gradients).forEach((key, index) => {
+    const startColor = shuffledColors[index % shuffledColors.length];
+    const endColor = shuffledColors[(index + 1) % shuffledColors.length];
+    const midColor = shuffledColors[(index + 2) % shuffledColors.length];
+    gradients[key] = gradient([startColor, midColor, endColor]);
+  });
+}
+
+refreshGradients();
+
 const RPC_URLS = process.env.RPC_URLS ? process.env.RPC_URLS.split(",") : [process.env.RPC_URL]
 let currentRpcIndex = 0
 
-// Tracking nonce yang sudah digunakan dalam session ini
 const usedNonces = new Set()
-// Tracking transaksi pending
-const pendingTransactions = new Map() // txHash -> {timestamp, nonce, recipient}
-// Waktu maksimum transaksi pending (dalam detik) sebelum dianggap stuck
-const MAX_PENDING_TIME = 180 // 3 menit
+const pendingTransactions = new Map()
+const MAX_PENDING_TIME = 180
+
+let telegramNotificationDelay = 5
+
+const asciiArt = `
+                               /T /I          
+                              / |/ | .-~/    
+                          T\\ Y  I  |/  /  _  
+         /T               | \\I  |  I  Y.-~/  
+        I l   /I       T\\ |  |  l  |  T  /   
+ __  | \\l   \\l  \\I l __l  l   \\   \`  _. |    
+ \\ ~-l  \`\\   \`\\  \\  \\\\ ~\\  \\   \`. .-~   |    
+  \\   ~-. "-.  \`  \\  ^._ ^. "-.  /  \\   |    
+.--~-._  ~-  \`  _  ~-_.-"-." ._ /._ ." ./    
+ >--.  ~-.   ._  ~>-"    "\\\\   7   7   ]     
+^.___~"--._    ~-{  .-~ .  \`\\ Y . /    |     
+ <__ ~"-.  ~       /_/   \\   \\I  Y   : |
+   ^-.__           ~(_/   \\   >._:   | l______     
+       ^--.,___.-~"  /_/   !  \`-.~"--l_ /     ~"-.  
+              (_/ .  ~(   /'     "~"--,Y   -=b-. _) 
+               (_/ .  \\  :           / l      c"~o \\
+                \\ /    \`.    .     .^   \\_.-~"~--.  ) 
+                 (_/ .   \`  /     /       !       )/  
+                  / / _.   '.   .':      /        ' 
+                  ~(_/ .   /    _  \`  .-<_      -EDO
+                    /_/ . ' .-~" \`.  / \\  \\          ,z=.
+                    ~( /   '  :   | K   "-.~-.______//
+                      "-,.    l   I/ \\_    __{--->._(==.
+                       //(     \\  <    ~"~"     //
+                      /' /\\     \\  \\     ,v=.  ((
+                    .^. / /\\     "  }__ //===-  \`
+                   / / ' '  "-.,__ {---(==-
+                 .^ '       :  T  ~"   ll
+                / .  .  . : | :!        \\\\ 
+               (_/  /   | | j-"          ~^
+                 ~-<_(_.^-~"
+`;
+
+async function displayAsciiArt() {
+  const animation = chalkAnimation.rainbow(asciiArt);
+  return new Promise(resolve => {
+    setTimeout(() => {
+      animation.stop();
+      resolve();
+    }, 2000);
+  });
+}
 
 function logError(context, error, additionalInfo = {}) {
   const timestamp = new Date().toISOString()
-  console.log(chalk.hex("#FF3131")(`❌ Error in ${context}: ${error.message}`))
+  console.log(gradients.warningGradient(`❌ Error in ${context}: ${error.message}`))
 }
 
 function getNextProvider() {
@@ -38,42 +158,108 @@ let provider = getNextProvider()
 
 const privateKeys = process.env.PRIVATE_KEYS ? process.env.PRIVATE_KEYS.split(",") : []
 if (privateKeys.length === 0) {
-  console.log(chalk.hex("#FF3131")("❌ PRIVATE_KEYS tidak ditemukan di .env!"))
+  console.log(gradients.warningGradient("❌ PRIVATE_KEYS tidak ditemukan di .env!"))
   process.exit(1)
 }
 
 const wallets = privateKeys.map((key) => new ethers.Wallet(key, provider))
 
-// Daftar token yang didukung
 const tokens = {
   BTC: process.env.BTC_CONTRACT,
   MTT: process.env.MTT_CONTRACT,
   TDI: process.env.TDI_CONTRACT,
+  TEA: "native",
 }
 
-let telegramNotificationDelay = 0
+const ERC20_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+]
 
 function escapeMarkdownV2(text) {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&")
+  if (text === undefined || text === null) {
+    return ""
+  }
+  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&")
 }
 
-async function sendTelegramMessage(message, txHash = null) {
+async function sendTelegramMessage(txInfo) {
   try {
     await new Promise((resolve) => setTimeout(resolve, telegramNotificationDelay * 1000))
 
-    // Jika ada hash transaksi, tambahkan link explorer
-    let finalMessage = message
-    if (txHash) {
-      const explorerLink = `https://assam.tea.xyz/tx/${txHash}`
-      finalMessage += `\n🔍 Explorer: ${explorerLink}`
+    if (typeof txInfo === "string") {
+      const escapedText = txInfo.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&")
+
+      const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`
+      const body = JSON.stringify({
+        chat_id: process.env.TELEGRAM_CHAT_ID,
+        text: escapedText,
+        parse_mode: "MarkdownV2",
+        disable_web_page_preview: true,
+      })
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.ok) {
+        throw new Error(result.description || "Unknown Telegram error")
+      }
+      console.log(getRandomGradient()("📩 Notifikasi Telegram ") + getRandomGradient()("berhasil dikirim!"))
+      return
     }
 
-    const escapedMessage = escapeMarkdownV2(finalMessage)
+    if (!txInfo || typeof txInfo !== "object") {
+      console.log(gradients.warningGradient("❌ Error: Invalid txInfo data for Telegram notification"))
+      return
+    }
+
+    const timestamp = new Date()
+    const formattedDate = timestamp.toLocaleString("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "short",
+    })
+
+    const formattedBalance = Number(txInfo.remainingBalance || 0).toFixed(4)
+
+    const escapedTxHash = escapeMarkdownV2(txInfo.txHash)
+    const escapedAssamUrl = "https\\:\\/\\/assam\\.tea\\.xyz\\/tx\\/" + escapedTxHash
+    const escapedTwitterUrl = "https\\:\\/\\/twitter\\.com\\/edosetiawan\\_eth"
+
+    const message = `🚀 *TRANSAKSI BERHASIL*  
+  
+👛 *Wallet:* \`${escapeMarkdownV2(txInfo.wallet)}\`  
+📤 *Dikirim:* \`${escapeMarkdownV2(txInfo.amount)} ${escapeMarkdownV2(txInfo.token)}\`  
+🎯 *Penerima:* \`${escapeMarkdownV2(txInfo.recipient)}\`  
+🔗 [Lihat di Assam Tea](${escapedAssamUrl})  
+
+⛽ *Gas Usage:*  
+• Max Priority Fee: \`${escapeMarkdownV2(txInfo.gasPrice)}\`  
+• *Biaya Gas:* \`${escapeMarkdownV2(txInfo.gasUsed)}\`  
+
+💰 *Sisa Saldo:* \`${escapeMarkdownV2(formattedBalance)} TEA\`  
+⚠️ *Jaringan:* ${txInfo.networkCongestion > 1 ? "*Padat*" : "*Normal*"}  
+⏰ *Waktu:* \`${escapeMarkdownV2(formattedDate)}\`  
+
+🔄 *Transaksi \\#${escapeMarkdownV2(txInfo.currentIndex)} dari ${escapeMarkdownV2(txInfo.totalTx)}* \\| 🌐 *Assam Testnet*
+  
+✨ *Powered by* [edosetiawan\\.eth](${escapedTwitterUrl}) ✨`
+
     const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`
     const body = JSON.stringify({
       chat_id: process.env.TELEGRAM_CHAT_ID,
-      text: escapedMessage,
+      text: message,
       parse_mode: "MarkdownV2",
+      disable_web_page_preview: true,
     })
 
     const response = await fetch(url, {
@@ -85,23 +271,82 @@ async function sendTelegramMessage(message, txHash = null) {
     const result = await response.json()
 
     if (!response.ok || !result.ok) {
+      console.log("Error response from Telegram:", result)
       throw new Error(result.description || "Unknown Telegram error")
     }
-    console.log(chalk.hex("#FF00FF")("📩 Notifikasi Telegram ") + chalk.hex("#00FFFF")("berhasil dikirim!"))
+    console.log(getRandomGradient()("📩 Notifikasi Telegram ") + getRandomGradient()("berhasil dikirim!"))
   } catch (error) {
     logError("Telegram Notification", error)
+    console.log(getRandomGradient()(`⚠️ Notifikasi Telegram gagal dikirim: ${error.message}`))
+    console.log(getRandomGradient()("⚠️ Transaksi tetap diproses meskipun notifikasi gagal."))
   }
 }
 
-// Fungsi untuk mendapatkan nonce yang valid dan belum digunakan
+async function sendTelegramCSV(csvData, filename) {
+  try {
+    const tempFilePath = `./${filename}`
+    fs.writeFileSync(tempFilePath, csvData)
+
+    const formData = new URLSearchParams()
+    formData.append("chat_id", process.env.TELEGRAM_CHAT_ID)
+    formData.append("caption", `📊 Laporan Transaksi ${new Date().toLocaleString("id-ID")}`)
+
+    const fileBuffer = fs.readFileSync(tempFilePath)
+
+    const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendDocument`
+
+    const boundary = "----WebKitFormBoundary" + Math.random().toString(16).substr(2)
+
+    let body = ""
+
+    body += `--${boundary}\r\n`
+    body += `Content-Disposition: form-data; name="chat_id"\r\n\r\n`
+    body += `${process.env.TELEGRAM_CHAT_ID}\r\n`
+
+    body += `--${boundary}\r\n`
+    body += `Content-Disposition: form-data; name="caption"\r\n\r\n`
+    body += `📊 Laporan Transaksi ${new Date().toLocaleString("id-ID")}\r\n`
+
+    body += `--${boundary}\r\n`
+    body += `Content-Disposition: form-data; name="document"; filename="${filename}"\r\n`
+    body += `Content-Type: text/csv\r\n\r\n`
+
+    const requestBody = Buffer.concat([
+      Buffer.from(body, "utf8"),
+      fileBuffer,
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+    ])
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": requestBody.length.toString(),
+      },
+      body: requestBody,
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || !result.ok) {
+      throw new Error(result.description || "Unknown Telegram error")
+    }
+
+    console.log(getRandomGradient()("📩 File CSV ") + getRandomGradient()("berhasil dikirim ke Telegram!"))
+
+    fs.unlinkSync(tempFilePath)
+  } catch (error) {
+    logError("Telegram CSV Upload", error)
+    console.log(getRandomGradient()(`⚠️ Gagal mengirim file CSV ke Telegram: ${error.message}`))
+  }
+}
+
 async function getValidNonce(wallet, forceRefresh = false) {
   try {
-    // Selalu dapatkan nonce terbaru dari network jika forceRefresh = true
     const currentNonce = forceRefresh
       ? await provider.getTransactionCount(wallet.address, "pending")
       : await provider.getTransactionCount(wallet.address, "pending")
 
-    // Cek apakah nonce sudah digunakan dalam session ini
     let nonce = currentNonce
     while (usedNonces.has(nonce)) {
       nonce++
@@ -110,21 +355,17 @@ async function getValidNonce(wallet, forceRefresh = false) {
     return nonce
   } catch (error) {
     logError("Get Valid Nonce", error)
-    // Jika gagal mendapatkan nonce, coba dengan provider lain
     provider = getNextProvider()
     const newWallet = new ethers.Wallet(wallet.privateKey, provider)
     return await getValidNonce(newWallet, true)
   }
 }
 
-// Fungsi untuk memeriksa network congestion
 async function checkNetworkCongestion() {
   try {
     const feeData = await provider.getFeeData()
 
-    // Jika menggunakan EIP-1559
     if (feeData.maxFeePerGas) {
-      // Hitung rasio maxPriorityFeePerGas terhadap baseFee
       const baseFee = feeData.lastBaseFeePerGas || BigInt(0)
       const priorityFee = feeData.maxPriorityFeePerGas || BigInt(0)
 
@@ -132,19 +373,14 @@ async function checkNetworkCongestion() {
 
       const ratio = Number((priorityFee * BigInt(100)) / baseFee)
 
-      // Tentukan level congestion
-      if (ratio > 50) return { congested: true, level: 3 } // Sangat padat
-      if (ratio > 30) return { congested: true, level: 2 } // Padat
-      if (ratio > 15) return { congested: true, level: 1 } // Sedikit padat
-      return { congested: false, level: 0 } // Normal
-    }
-    // Jika tidak menggunakan EIP-1559
-    else {
-      // Gunakan gas price sebagai indikator
+      if (ratio > 50) return { congested: true, level: 3 }
+      if (ratio > 30) return { congested: true, level: 2 }
+      if (ratio > 15) return { congested: true, level: 1 }
+      return { congested: false, level: 0 }
+    } else {
       const gasPrice = feeData.gasPrice || BigInt(0)
       const gasPriceGwei = Number(ethers.formatUnits(gasPrice, "gwei"))
 
-      // Threshold bisa disesuaikan berdasarkan jaringan
       if (gasPriceGwei > 100) return { congested: true, level: 3 }
       if (gasPriceGwei > 50) return { congested: true, level: 2 }
       if (gasPriceGwei > 20) return { congested: true, level: 1 }
@@ -152,29 +388,26 @@ async function checkNetworkCongestion() {
     }
   } catch (error) {
     logError("Check Network Congestion", error)
-    return { congested: false, level: 0 } // Default jika error
+    return { congested: false, level: 0 }
   }
 }
 
-// Fungsi untuk menghitung gas parameters berdasarkan kondisi jaringan
 async function calculateGasParameters(increasePercentage = 0) {
   try {
     const feeData = await provider.getFeeData()
     const congestion = await checkNetworkCongestion()
 
-    // Tambahkan persentase berdasarkan congestion level
     let totalIncrease = increasePercentage
     if (congestion.congested) {
       const congestionIncrease = [10, 20, 40][congestion.level - 1] || 0
       totalIncrease += congestionIncrease
       console.log(
-        chalk.hex("#FFFF00")(`⚠️ Jaringan padat (level ${congestion.level}), menambah gas +${congestionIncrease}%`),
+        getRandomGradient()(`⚠️ Jaringan padat (level ${congestion.level}), menambah gas +${congestionIncrease}%`),
       )
     }
 
     const multiplier = 1 + totalIncrease / 100
 
-    // Jika mendukung EIP-1559
     if (feeData.maxFeePerGas) {
       const maxPriorityFeePerGas = BigInt(Math.floor(Number(feeData.maxPriorityFeePerGas) * multiplier))
       const maxFeePerGas = feeData.lastBaseFeePerGas
@@ -182,62 +415,51 @@ async function calculateGasParameters(increasePercentage = 0) {
         : BigInt(Math.floor(Number(feeData.maxFeePerGas) * multiplier))
 
       return {
-        type: 2, // EIP-1559
+        type: 2,
         maxPriorityFeePerGas,
         maxFeePerGas,
         supportsEIP1559: true,
       }
-    }
-    // Jika tidak mendukung EIP-1559
-    else {
+    } else {
       return {
-        type: 0, // Legacy
+        type: 0,
         gasPrice: BigInt(Math.floor(Number(feeData.gasPrice) * multiplier)),
         supportsEIP1559: false,
       }
     }
   } catch (error) {
     logError("Calculate Gas Parameters", error)
-    // Fallback ke provider lain jika error
     provider = getNextProvider()
     return calculateGasParameters(increasePercentage)
   }
 }
 
-// Fungsi untuk memeriksa transaksi yang stuck
 async function checkStuckTransactions(wallet) {
   const now = Date.now()
   const stuckTxs = []
 
   for (const [txHash, txInfo] of pendingTransactions.entries()) {
-    // Jika transaksi sudah pending lebih dari MAX_PENDING_TIME
     if (now - txInfo.timestamp > MAX_PENDING_TIME * 1000) {
       try {
-        // Cek status transaksi
         const tx = await provider.getTransaction(txHash)
 
-        // Jika transaksi masih pending (belum di-mine)
         if (tx && !tx.blockNumber) {
           stuckTxs.push({
             hash: txHash,
             nonce: txInfo.nonce,
             recipient: txInfo.recipient,
           })
-        }
-        // Jika transaksi sudah selesai atau tidak ditemukan, hapus dari tracking
-        else {
+        } else {
           pendingTransactions.delete(txHash)
         }
       } catch (error) {
-        // Jika error saat mengecek transaksi, anggap masih pending
         logError(`Check Tx ${txHash}`, error)
       }
     }
   }
 
-  // Jika ada transaksi yang stuck, coba cancel
   if (stuckTxs.length > 0) {
-    console.log(chalk.hex("#FFFF00")(`⚠️ Ditemukan ${stuckTxs.length} transaksi stuck, mencoba cancel...`))
+    console.log(getRandomGradient()(`⚠️ Ditemukan ${stuckTxs.length} transaksi stuck, mencoba cancel...`))
 
     for (const stuckTx of stuckTxs) {
       await cancelStuckTransaction(wallet, stuckTx)
@@ -247,15 +469,12 @@ async function checkStuckTransactions(wallet) {
   return stuckTxs.length > 0
 }
 
-// Fungsi untuk membatalkan transaksi yang stuck
 async function cancelStuckTransaction(wallet, stuckTx) {
   try {
-    console.log(chalk.hex("#FFFF00")(`⏳ Membatalkan transaksi stuck: ${stuckTx.hash} (nonce: ${stuckTx.nonce})`))
+    console.log(getRandomGradient()(`⏳ Membatalkan transaksi stuck: ${stuckTx.hash} (nonce: ${stuckTx.nonce})`))
 
-    // Dapatkan gas parameters dengan peningkatan 50% untuk memastikan cancel berhasil
     const gasParams = await calculateGasParameters(50)
 
-    // Buat transaksi 0 value ke diri sendiri dengan nonce yang sama
     const tx = {
       to: wallet.address,
       value: 0n,
@@ -272,18 +491,15 @@ async function cancelStuckTransaction(wallet, stuckTx) {
       gasLimit: 21000,
     }
 
-    // Kirim transaksi cancel
     const response = await wallet.sendTransaction(tx)
-    console.log(chalk.hex("#00FF00")(`✅ Transaksi cancel dikirim: ${response.hash}`))
+    console.log(getRandomGradient()(`✅ Transaksi cancel dikirim: ${response.hash}`))
 
-    // Tunggu konfirmasi
     const receipt = await response.wait()
 
     if (receipt && receipt.status === 1) {
-      console.log(chalk.hex("#00FF00")(`✅ Transaksi dengan nonce ${stuckTx.nonce} berhasil dibatalkan!`))
+      console.log(getRandomGradient()(`✅ Transaksi dengan nonce ${stuckTx.nonce} berhasil dibatalkan!`))
       pendingTransactions.delete(stuckTx.hash)
 
-      // Kirim notifikasi Telegram
       const message =
         `🚫 Transaksi Stuck Dibatalkan\n` +
         `👛 Wallet: ${wallet.address}\n` +
@@ -292,7 +508,7 @@ async function cancelStuckTransaction(wallet, stuckTx) {
         `✅ Transaksi pembatalan: ${response.hash}\n` +
         `⏰ Waktu: ${new Date().toLocaleString()}`
 
-      await sendTelegramMessage(message, response.hash)
+      await sendTelegramMessage(message)
       return true
     }
 
@@ -303,17 +519,12 @@ async function cancelStuckTransaction(wallet, stuckTx) {
   }
 }
 
-// Fungsi untuk estimasi gas limit
 async function estimateGasLimit(tokenContract, recipient, amountInWei) {
   try {
-    // Estimasi gas untuk transaksi token
     const gasEstimate = await tokenContract.transfer.estimateGas(recipient, amountInWei)
-
-    // Tambahkan buffer 20% untuk keamanan
     return BigInt(Math.floor(Number(gasEstimate) * 1.2))
   } catch (error) {
     logError("Estimate Gas", error)
-    // Fallback ke gas limit default jika estimasi gagal
     return 100000n
   }
 }
@@ -334,10 +545,8 @@ async function sendTransactionWithRetry(
   let nonce = suggestedNonce !== null ? suggestedNonce : await getValidNonce(wallet)
   let lastError = null
 
-  // Cek dan tangani transaksi yang stuck sebelum mengirim yang baru
   await checkStuckTransactions(wallet)
 
-  // Daftar persentase kenaikan gas untuk setiap percobaan
   const gasIncreasePercentages = [0, 10, 20, 30, 40]
 
   while (retries < maxRetries) {
@@ -358,36 +567,31 @@ async function sendTransactionWithRetry(
         throw new Error("Network check failed, switching provider")
       }
 
-      console.log(chalk.hex("#FF3131")(`🚀 Mengirim ${amount} ${tokenSymbol} ke ${recipient}`))
+      console.log(getRandomGradient()(`🚀 Mengirim ${amount} ${tokenSymbol} ke ${recipient}`))
       console.log(
-        chalk.hex("#FF00FF")("• felicia ") +
-          chalk.hex("#FFFF00")(`(${currentIndex + 1}/${totalTx}) `) +
-          chalk.hex("#00FFFF")("edosetiawan.eth"),
+        getRandomGradient()("• felicia ") +
+          getRandomGradient()(`(${currentIndex + 1}/${totalTx}) `) +
+          getRandomGradient()("edosetiawan.eth"),
       )
 
-      // Cek apakah nonce sudah digunakan dalam session ini
       if (usedNonces.has(nonce)) {
         console.log(
-          chalk.hex("#FFFF00")(`⚠️ Nonce ${nonce} sudah digunakan dalam session ini, mendapatkan nonce baru...`),
+          getRandomGradient()(`⚠️ Nonce ${nonce} sudah digunakan dalam session ini, mendapatkan nonce baru...`),
         )
         nonce = await getValidNonce(wallet, true)
-        console.log(chalk.hex("#00FFFF")(`🔢 Nonce baru: ${nonce}`))
+        console.log(getRandomGradient()(`🔢 Nonce baru: ${nonce}`))
       }
 
-      // Tandai nonce sebagai digunakan
       usedNonces.add(nonce)
 
-      // Hitung gas parameters untuk percobaan ini
       const increasePercentage = gasIncreasePercentages[Math.min(retries, gasIncreasePercentages.length - 1)]
       const gasParams = await calculateGasParameters(increasePercentage)
 
-      // Estimasi gas limit
       const gasLimit = await estimateGasLimit(tokenContract, recipient, amountInWei)
 
-      // Log informasi gas
       if (gasParams.supportsEIP1559) {
         console.log(
-          chalk.hex("#FFFF00")(
+          getRandomGradient()(
             `⛽ EIP-1559: maxPriorityFee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, ` +
               `maxFee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei ` +
               `(${increasePercentage > 0 ? `+${increasePercentage}%` : "normal"})`,
@@ -395,16 +599,15 @@ async function sendTransactionWithRetry(
         )
       } else {
         console.log(
-          chalk.hex("#FFFF00")(
+          getRandomGradient()(
             `⛽ Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei ` +
               `(${increasePercentage > 0 ? `+${increasePercentage}%` : "normal"})`,
           ),
         )
       }
 
-      console.log(chalk.hex("#FFFF00")(`🔢 Menggunakan nonce: ${nonce}, Gas Limit: ${gasLimit}`))
+      console.log(getRandomGradient()(`🔢 Menggunakan nonce: ${nonce}, Gas Limit: ${gasLimit}`))
 
-      // Buat transaksi dengan parameter gas yang sesuai
       const txOptions = {
         nonce,
         gasLimit,
@@ -421,9 +624,8 @@ async function sendTransactionWithRetry(
 
       const tx = await tokenContract.transfer(recipient, amountInWei, txOptions)
 
-      console.log(chalk.hex("#00FF00")(`✅ Transaksi dikirim: ${tx.hash}`))
+      console.log(createRandomGradient()(`✅ Transaksi dikirim: ${tx.hash}`))
 
-      // Tambahkan ke daftar transaksi pending
       pendingTransactions.set(tx.hash, {
         timestamp: Date.now(),
         nonce,
@@ -434,27 +636,34 @@ async function sendTransactionWithRetry(
         gasParams.supportsEIP1559 ? gasParams.maxFeePerGas : gasParams.gasPrice,
       )
 
-      const timestamp = new Date()
-      const formattedTimestamp = `${timestamp.getDate()} ${timestamp.toLocaleString("default", { month: "long" })} ${timestamp.getFullYear()} ${timestamp.getHours()}:${timestamp.getMinutes()}:${timestamp.getSeconds()}`
+      const gasPriceValue = gasParams.supportsEIP1559
+        ? ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")
+        : ethers.formatUnits(gasParams.gasPrice, "gwei")
 
-      const message =
-        `🚀 Mengirim ${amount} ${tokenSymbol} ke ${recipient}\n` +
-        `• felicia (${currentIndex + 1}/${totalTx}) edosetiawan.eth\n` +
-        `✅ Transaksi dikirim: ${tx.hash}\n` +
-        `⏱️ Estimasi waktu: ${estimatedTime}\n` +
-        `⛽ ${
-          gasParams.supportsEIP1559
-            ? `Max Priority Fee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, Max Fee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei`
-            : `Gas Price: ${ethers.formatUnits(gasParams.gasPrice, "gwei")} Gwei`
-        }\n` +
-        `⏰ Waktu transaksi: ${formattedTimestamp}`
+      const gasUsedValue = ethers.formatUnits(
+        gasParams.supportsEIP1559
+          ? BigInt(gasLimit) * gasParams.maxFeePerGas
+          : BigInt(gasLimit) * (gasParams.gasPrice || BigInt(1)),
+        "ether",
+      )
 
-      await sendTelegramMessage(message, tx.hash)
-      console.log(chalk.hex("#00FFFF")(message))
+      const teaBalance = await checkTeaBalance(wallet.address)
+      const networkCongestion = (await checkNetworkCongestion()).level
 
-      const receipt = await tx.wait()
+      await sendTelegramMessage({
+        wallet: wallet.address,
+        amount: amount.toString(),
+        token: tokenSymbol,
+        recipient: recipient,
+        txHash: tx.hash,
+        gasPrice: gasPriceValue,
+        gasUsed: gasUsedValue,
+        remainingBalance: teaBalance,
+        networkCongestion: networkCongestion,
+        currentIndex: (currentIndex + 1).toString(),
+        totalTx: totalTx.toString(),
+      })
 
-      // Hapus dari daftar transaksi pending
       pendingTransactions.delete(tx.hash)
 
       return "SUKSES"
@@ -463,39 +672,29 @@ async function sendTransactionWithRetry(
       logError("Transaction", err)
 
       if (err.message.includes("insufficient funds")) {
-        console.log(chalk.hex("#FF3131")("❌ Dana tidak mencukupi! Membatalkan transaksi."))
-        // Hapus nonce dari daftar yang digunakan karena transaksi gagal
+        console.log(getRandomGradient()("❌ Dana tidak mencukupi! Membatalkan transaksi."))
         usedNonces.delete(nonce)
         return "GAGAL"
       }
 
-      // Cek apakah error terkait nonce
       if (
         err.message.includes("nonce too low") ||
         err.message.includes("already known") ||
         err.message.includes("replacement transaction underpriced") ||
         err.message.includes("nonce has already been used")
       ) {
-        console.log(chalk.hex("#FFFF00")("⚠️ Nonce conflict detected. Getting new nonce..."))
-        // Hapus nonce lama dari daftar yang digunakan
+        console.log(getRandomGradient()("⚠️ Nonce conflict detected. Getting new nonce..."))
         usedNonces.delete(nonce)
-        // Dapatkan nonce baru yang lebih tinggi
         nonce = await getValidNonce(wallet, true)
-        console.log(chalk.hex("#00FFFF")(`🔢 Nonce baru: ${nonce}`))
-      }
-      // Cek apakah error terkait gas price
-      else if (
+        console.log(getRandomGradient()(`🔢 Nonce baru: ${nonce}`))
+      } else if (
         err.message.includes("gas price too low") ||
         err.message.includes("max fee per gas less than block base fee") ||
         err.message.includes("transaction underpriced") ||
         err.message.includes("fee cap less than block base fee")
       ) {
-        console.log(chalk.hex("#FFFF00")("⚠️ Gas price terlalu rendah. Meningkatkan gas price..."))
-        // Tidak perlu mengubah nonce karena transaksi dengan nonce ini belum masuk ke blockchain
-      }
-      // Error lainnya
-      else {
-        // Hapus nonce dari daftar yang digunakan untuk error yang tidak terkait nonce
+        console.log(getRandomGradient()("⚠️ Gas price terlalu rendah. Meningkatkan gas price..."))
+      } else {
         usedNonces.delete(nonce)
       }
 
@@ -503,7 +702,7 @@ async function sendTransactionWithRetry(
       if (retries < maxRetries) {
         const waitTime = Math.min(baseDelay * Math.pow(2, retries), 30000)
         console.log(
-          chalk.hex("#FFFF00")(
+          getRandomGradient()(
             `⏳ Menunggu ${waitTime / 1000} detik sebelum mencoba lagi (Percobaan ${retries + 1}/${maxRetries})...`,
           ),
         )
@@ -513,18 +712,300 @@ async function sendTransactionWithRetry(
   }
 
   console.log(
-    chalk.hex("#FF3131")(`❌ Gagal setelah ${maxRetries} percobaan: ${lastError?.message || "Unknown error"}`),
+    getRandomGradient()(`❌ Gagal setelah ${maxRetries} percobaan: ${lastError?.message || "Unknown error"}`),
   )
-  // Hapus nonce dari daftar yang digunakan karena semua percobaan gagal
   usedNonces.delete(nonce)
   return "GAGAL"
+}
+
+function processCSVFile(filePath) {
+  try {
+    let data = fs.readFileSync(filePath, "utf8").trim().split("\n")
+
+    if (data.length > 0 && data[0].toLowerCase().includes("quantity")) {
+      console.log(getRandomGradient()("⚠️ Melewati baris pertama karena berisi header"))
+      data = data.slice(1)
+    }
+
+    console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                        OPSI JUMLAH KOIN                                   ║"))
+    console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
+
+    console.log(getRandomGradient()("[1] Gunakan nilai dari file CSV (jika ada)"))
+    console.log(getRandomGradient()("[2] Atur jumlah manual (sama untuk semua address)"))
+    console.log(getRandomGradient()("[3] Otomatis acak (kustom)"))
+    console.log(getRandomGradient()("[0] Kembali"))
+
+    while (true) {
+      const input = readline.question(getRandomGradient()("\n➤ Pilih opsi (0-3): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+        return null
+      }
+
+      if (!isNaN(choice) && choice >= 1 && choice <= 3) {
+        const processedData = []
+
+        if (choice === 1) {
+          for (const row of data) {
+            const parts = row.split(",").map((part) => part.trim())
+            const address = parts[0]
+
+            if (!ethers.isAddress(address)) {
+              continue
+            }
+
+            let quantity = parts[1]
+            if (!quantity || isNaN(Number(quantity))) {
+              console.log(getRandomGradient()(`⚠️ Quantity tidak ditemukan untuk ${address}, meminta input manual...`))
+              while (true) {
+                const qInput = readline.question(getRandomGradient()(`Masukkan jumlah untuk ${address}: `))
+                const qValue = Number(qInput)
+                if (!isNaN(qValue) && qValue > 0) {
+                  quantity = qValue
+                  break
+                }
+                console.log(getRandomGradient()("❌ Jumlah harus berupa angka positif!"))
+              }
+            }
+
+            processedData.push(`${address},${quantity}`)
+          }
+
+          console.log(
+            getRandomGradient()(`✅ Menggunakan nilai dari file CSV dengan ${processedData.length} transaksi`),
+          )
+        } else if (choice === 2) {
+          let manualQuantity
+          while (true) {
+            const qInput = readline.question(getRandomGradient()("Masukkan jumlah koin (untuk semua address): "))
+            const qValue = Number(qInput)
+            if (!isNaN(qValue) && qValue > 0) {
+              manualQuantity = qValue
+              break
+            }
+            console.log(getRandomGradient()("❌ Jumlah harus berupa angka positif!"))
+          }
+
+          for (const row of data) {
+            const parts = row.split(",").map((part) => part.trim())
+            const address = parts[0]
+
+            if (!ethers.isAddress(address)) {
+              continue
+            }
+
+            processedData.push(`${address},${manualQuantity}`)
+          }
+
+          console.log(
+            getRandomGradient()(
+              `✅ Menggunakan nilai manual ${manualQuantity} untuk ${processedData.length} transaksi`,
+            ),
+          )
+        } else if (choice === 3) {
+          let minValue, maxValue
+
+          while (true) {
+            const minInput = readline.question(getRandomGradient()("Masukkan nilai minimum: "))
+            minValue = Number(minInput)
+            if (!isNaN(minValue) && minValue > 0) break
+            console.log(getRandomGradient()("❌ Nilai minimum harus berupa angka positif!"))
+          }
+
+          while (true) {
+            const maxInput = readline.question(getRandomGradient()("Masukkan nilai maksimum: "))
+            maxValue = Number(maxInput)
+            if (!isNaN(maxValue) && maxValue > minValue) break
+            console.log(getRandomGradient()(`❌ Nilai maksimum harus berupa angka lebih besar dari ${minValue}!`))
+          }
+
+          for (const row of data) {
+            const parts = row.split(",").map((part) => part.trim())
+            const address = parts[0]
+
+            if (!ethers.isAddress(address)) {
+              continue
+            }
+
+            const randomAmount = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
+            processedData.push(`${address},${randomAmount}`)
+          }
+
+          console.log(
+            getRandomGradient()(
+              `✅ Menggunakan nilai acak (${minValue}-${maxValue}) untuk ${processedData.length} transaksi`,
+            ),
+          )
+        }
+
+        return processedData
+      }
+
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+  } catch (error) {
+    logError("Process CSV File", error)
+    console.log(getRandomGradient()(`❌ Error saat memproses file CSV: ${error.message}`))
+    return null
+  }
+}
+
+function inputManualAddresses() {
+  try {
+    console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                      INPUT MANUAL ADDRESS                                 ║"))
+    console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
+
+    console.log(getRandomGradient()("Masukkan alamat wallet satu per satu. Ketik 'selesai' untuk mengakhiri input."))
+
+    const addresses = []
+    let addressCount = 1
+
+    while (true) {
+      const input = readline.question(getRandomGradient()(`Alamat #${addressCount}: `))
+
+      if (input.toLowerCase() === "selesai") {
+        break
+      }
+
+      if (ethers.isAddress(input)) {
+        addresses.push(input)
+        addressCount++
+      } else {
+        console.log(getRandomGradient()(`❌ Alamat tidak valid: ${input}! Silakan coba lagi.`))
+      }
+    }
+
+    if (addresses.length === 0) {
+      console.log(getRandomGradient()("❌ Tidak ada alamat yang diinput!"))
+      return null
+    }
+
+    console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                        OPSI JUMLAH KOIN                                   ║"))
+    console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
+
+    console.log(getRandomGradient()("[1] Atur jumlah manual (sama untuk semua address)"))
+    console.log(getRandomGradient()("[2] Atur jumlah berbeda untuk setiap address"))
+    console.log(getRandomGradient()("[3] Otomatis acak (kustom)"))
+    console.log(getRandomGradient()("[0] Kembali"))
+
+    while (true) {
+      const input = readline.question(getRandomGradient()("\n➤ Pilih opsi (0-3): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+        return null
+      }
+
+      if (!isNaN(choice) && choice >= 1 && choice <= 3) {
+        const processedData = []
+
+        if (choice === 1) {
+          let manualQuantity
+          while (true) {
+            const qInput = readline.question(getRandomGradient()("Masukkan jumlah koin (untuk semua address): "))
+            const qValue = Number(qInput)
+            if (!isNaN(qValue) && qValue > 0) {
+              manualQuantity = qValue
+              break
+            }
+            console.log(getRandomGradient()("❌ Jumlah harus berupa angka positif!"))
+          }
+
+          for (const address of addresses) {
+            processedData.push(`${address},${manualQuantity}`)
+          }
+
+          console.log(
+            getRandomGradient()(
+              `✅ Menggunakan nilai manual ${manualQuantity} untuk ${processedData.length} transaksi`,
+            ),
+          )
+        } else if (choice === 2) {
+          for (let i = 0; i < addresses.length; i++) {
+            const address = addresses[i]
+            let quantity
+
+            while (true) {
+              const qInput = readline.question(getRandomGradient()(`Masukkan jumlah untuk ${address}: `))
+              const qValue = Number(qInput)
+              if (!isNaN(qValue) && qValue > 0) {
+                quantity = qValue
+                break
+              }
+              console.log(getRandomGradient()("❌ Jumlah harus berupa angka positif!"))
+            }
+
+            processedData.push(`${address},${quantity}`)
+          }
+
+          console.log(
+            getRandomGradient()(`✅ Menggunakan nilai manual berbeda untuk ${processedData.length} transaksi`),
+          )
+        } else if (choice === 3) {
+          let minValue, maxValue
+
+          while (true) {
+            const minInput = readline.question(getRandomGradient()("Masukkan nilai minimum: "))
+            minValue = Number(minInput)
+            if (!isNaN(minValue) && minValue > 0) break
+            console.log(getRandomGradient()("❌ Nilai minimum harus berupa angka positif!"))
+          }
+
+          while (true) {
+            const maxInput = readline.question(getRandomGradient()("Masukkan nilai maksimum: "))
+            maxValue = Number(maxInput)
+            if (!isNaN(maxValue) && maxValue > minValue) break
+            console.log(getRandomGradient()(`❌ Nilai maksimum harus berupa angka lebih besar dari ${minValue}!`))
+          }
+
+          for (const address of addresses) {
+            const randomAmount = Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue
+            processedData.push(`${address},${randomAmount}`)
+          }
+
+          console.log(
+            getRandomGradient()(
+              `✅ Menggunakan nilai acak (${minValue}-${maxValue}) untuk ${processedData.length} transaksi`,
+            ),
+          )
+        }
+
+        // Simpan ke CSV
+        console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+        console.log(getRandomGradient()("║                        SIMPAN KE FILE CSV                                 ║"))
+        console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
+
+        const fileName = readline.question(getRandomGradient()("Masukkan nama file (tanpa ekstensi .csv): "))
+        const csvFileName = fileName.trim() ? `${fileName.trim()}.csv` : `felicia_manual_${Date.now()}.csv`
+
+        const csvContent = "address,quantity\n" + processedData.map((row) => row).join("\n")
+
+        fs.writeFileSync(csvFileName, csvContent)
+        console.log(getRandomGradient()(`✅ Data berhasil disimpan ke file ${csvFileName}`))
+
+        return processedData
+      }
+
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+  } catch (error) {
+    logError("Input Manual Addresses", error)
+    console.log(getRandomGradient()(`❌ Error saat input manual address: ${error.message}`))
+    return null
+  }
 }
 
 function selectCSVFile() {
   try {
     const files = fs
       .readdirSync(".")
-      .filter((file) => file.startsWith("felicia_") && file.endsWith(".csv"))
+      .filter((file) => file.endsWith(".csv"))
       .sort((a, b) => {
         const numA = Number.parseInt(a.match(/\d+/)?.[0] || "0")
         const numB = Number.parseInt(b.match(/\d+/)?.[0] || "0")
@@ -532,116 +1013,120 @@ function selectCSVFile() {
       })
 
     if (files.length === 0) {
-      console.log(chalk.hex("#FF1493")("❌ Tidak ada file CSV yang ditemukan!"))
-      process.exit(1)
+      console.log(getRandomGradient()("⚠️ Tidak ada file CSV yang ditemukan!"))
+      console.log(getRandomGradient()("Anda dapat menggunakan opsi input manual address."))
     }
 
-    console.log(chalk.hex("#FF00FF")("\n╔═══════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║    PILIH FILE CSV     ║"))
-    console.log(chalk.hex("#FF00FF")("╚═══════════════════════╝\n"))
+    console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                          PILIH FILE CSV                                   ║"))
+    console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
 
     files.forEach((file, index) => {
-      console.log(chalk.hex("#00FFFF")(`[${index + 1}] ${file}`))
+      console.log(getRandomGradient()(`[${index + 1}] ${file}`))
     })
-    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+
+    console.log(getRandomGradient()(`[${files.length + 1}] Input manual address`))
+    console.log(getRandomGradient()("[0] Kembali"))
 
     while (true) {
-      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih file CSV (0-" + files.length + "): "))
+      const input = readline.question(getRandomGradient()("\n➤ Pilih opsi (0-" + (files.length + 1) + "): "))
       const choice = Number.parseInt(input)
 
       if (input.trim() === "0") {
-        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
-        process.exit(0)
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+        return null
       }
 
       if (!isNaN(choice) && choice > 0 && choice <= files.length) {
         return files[choice - 1]
+      } else if (choice === files.length + 1) {
+        return "manual_input"
       }
 
-      console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
     }
   } catch (error) {
     logError("File Selection", error)
-    console.log(chalk.hex("#FF3131")("❌ Terjadi kesalahan saat memilih file!"))
-    process.exit(1)
+    console.log(getRandomGradient()("❌ Terjadi kesalahan saat memilih file!"))
+    return null
   }
 }
 
 function chooseRetryCount() {
   while (true) {
-    const input = readline.question(chalk.hex("#00FFFF")("Masukkan jumlah retry jika gagal (1-10): "))
+    const input = readline.question(getRandomGradient()("Masukkan jumlah retry jika gagal (1-10): "))
 
     if (input.trim() === "0") {
-      console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan."))
-      process.exit(0)
+      console.log(getRandomGradient()("❌ Operasi dibatalkan."))
+      return null
     }
 
     const count = Number.parseInt(input)
     if (!isNaN(count) && count >= 1 && count <= 10) {
       return count
     }
-    console.log(chalk.hex("#FF3131")("❌ Jumlah retry harus antara 1-10!"))
+    console.log(getRandomGradient()("❌ Jumlah retry harus antara 1-10!"))
   }
 }
 
 function chooseTransactionDelay() {
-  console.log(chalk.hex("#FF00FF")("\n╔═══════════════════════╗"))
-  console.log(chalk.hex("#FF00FF")("║      MODE JEDA        ║"))
-  console.log(chalk.hex("#FF00FF")("╚═══════════════════════╝\n"))
+  console.log(getRandomGradient()("\n╔═══════════════════════════════════════════════════════════════════════════╗"))
+  console.log(getRandomGradient()("║                            MODE JEDA                                      ║"))
+  console.log(getRandomGradient()("╚═══════════════════════════════════════════════════════════════════════════╝\n"))
 
-  console.log(chalk.hex("#00FFFF")("[1] Tanpa Jeda"))
-  console.log(chalk.hex("#00FFFF")("[2] Jeda Manual"))
-  console.log(chalk.hex("#00FFFF")("[3] Jeda Acak"))
-  console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+  console.log(getRandomGradient()("[1] Tanpa Jeda"))
+  console.log(getRandomGradient()("[2] Jeda Manual"))
+  console.log(getRandomGradient()("[3] Jeda Acak"))
+  console.log(getRandomGradient()("[0] Kembali"))
 
   while (true) {
-    const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih mode jeda (0-3): "))
+    const input = readline.question(getRandomGradient()("\n➤ Pilih mode jeda (0-3): "))
     const choice = Number.parseInt(input)
 
     if (input.trim() === "0") {
-      console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
-      process.exit(0)
+      console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+      return null
     }
 
     if (!isNaN(choice) && choice >= 1 && choice <= 3) {
       return choice - 1
     }
 
-    console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+    console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
   }
 }
 
 function setManualDelay() {
   while (true) {
-    const input = readline.question(chalk.hex("#00FFFF")("Masukkan waktu jeda (0.1 - 1000 detik): "))
+    const input = readline.question(getRandomGradient()("Masukkan waktu jeda (0.1 - 1000 detik): "))
 
     if (input.trim() === "0") {
-      console.log(chalk.hex("#FF1493")("❌ Dibatalkan."))
-      process.exit(0)
+      console.log(getRandomGradient()("❌ Dibatalkan."))
+      return null
     }
 
     const delay = Number.parseFloat(input)
     if (!isNaN(delay) && delay >= 0.1 && delay <= 1000) {
       return delay
     }
-    console.log(chalk.hex("#FF3131")("❌ Waktu jeda harus antara 0.1 - 1000 detik!"))
+    console.log(getRandomGradient()("❌ Waktu jeda harus antara 0.1 - 1000 detik!"))
   }
 }
 
 function setRandomDelayRange() {
   while (true) {
-    const minInput = readline.question(chalk.hex("#00FFFF")("Masukkan waktu minimum jeda (0.1 - 1000 detik): "))
+    const minInput = readline.question(getRandomGradient()("Masukkan waktu minimum jeda (0.1 - 1000 detik): "))
 
     if (minInput.trim() === "0") {
-      console.log(chalk.hex("#FF1493")("❌ Dibatalkan."))
-      process.exit(0)
+      console.log(getRandomGradient()("❌ Dibatalkan."))
+      return null
     }
 
-    const maxInput = readline.question(chalk.hex("#00FFFF")("Masukkan waktu maksimum jeda (0.1 - 1000 detik): "))
+    const maxInput = readline.question(getRandomGradient()("Masukkan waktu maksimum jeda (0.1 - 1000 detik): "))
 
     if (maxInput.trim() === "0") {
-      console.log(chalk.hex("#FF1493")("❌ Dibatalkan."))
-      process.exit(0)
+      console.log(getRandomGradient()("❌ Dibatalkan."))
+      return null
     }
 
     const min = Number.parseFloat(minInput)
@@ -650,7 +1135,7 @@ function setRandomDelayRange() {
     if (!isNaN(min) && !isNaN(max) && min >= 0.1 && max <= 1000 && min < max) {
       return { min, max }
     }
-    console.log(chalk.hex("#FF3131")("❌ Range jeda tidak valid! Min harus >= 0.1, Max <= 1000, dan Min < Max"))
+    console.log(getRandomGradient()("❌ Range jeda tidak valid! Min harus >= 0.1, Max <= 1000, dan Min < Max"))
   }
 }
 
@@ -660,12 +1145,18 @@ function getRandomDelay(min, max) {
 
 function chooseBatchSize() {
   while (true) {
-    const input = readline.question(chalk.hex("#00FFFF")("Masukkan jumlah transaksi per batch (1-100): "))
+    const input = readline.question(getRandomGradient()("Masukkan jumlah transaksi per batch (1-100): "))
+
+    if (input.trim() === "0") {
+      console.log(getRandomGradient()("❌ Dibatalkan."))
+      return null
+    }
+
     const batchSize = Number.parseInt(input)
     if (!isNaN(batchSize) && batchSize >= 1 && batchSize <= 100) {
       return batchSize
     }
-    console.log(chalk.hex("#FF3131")("❌ Jumlah transaksi per batch harus antara 1 dan 100!"))
+    console.log(getRandomGradient()("❌ Jumlah transaksi per batch harus antara 1 dan 100!"))
   }
 }
 
@@ -676,11 +1167,11 @@ async function applyDelay(delayChoice, delayTime, randomDelayRange, currentIndex
     if (delayChoice === 0) {
       return
     } else if (delayChoice === 1) {
-      console.log(chalk.hex("#00FFFF")(`⏳ Menunggu ${delayTime} detik...`))
+      console.log(getRandomGradient()(`⏳ Menunggu ${delayTime} detik...`))
       await new Promise((resolve) => setTimeout(resolve, delayTime * 1000))
     } else if (delayChoice === 2) {
       const randomDelay = getRandomDelay(randomDelayRange.min, randomDelayRange.max)
-      console.log(chalk.hex("#00FFFF")(`⏳ Jeda acak: ${randomDelay.toFixed(1)} detik`))
+      console.log(getRandomGradient()(`⏳ Jeda acak: ${randomDelay.toFixed(1)} detik`))
       await new Promise((resolve) => setTimeout(resolve, randomDelay * 1000))
     }
   } catch (error) {
@@ -690,14 +1181,19 @@ async function applyDelay(delayChoice, delayTime, randomDelayRange, currentIndex
 
 function setTelegramDelay() {
   while (true) {
-    const input = readline.question(chalk.hex("#00FFFF")("Masukkan delay notifikasi Telegram (dalam detik, 0-60): "))
+    const input = readline.question(getRandomGradient()("Masukkan delay notifikasi Telegram (dalam detik, 0-60): "))
+
+    if (input.trim() === "0") {
+      telegramNotificationDelay = 0
+      return
+    }
 
     const delay = Number.parseInt(input)
     if (!isNaN(delay) && delay >= 0 && delay <= 60) {
       telegramNotificationDelay = delay
       return
     }
-    console.log(chalk.hex("#FF3131")("❌ Delay harus antara 0-60 detik!"))
+    console.log(getRandomGradient()("❌ Delay harus antara 0-60 detik!"))
   }
 }
 
@@ -723,8 +1219,42 @@ async function checkTeaBalance(address) {
   }
 }
 
+async function checkTokenBalance(tokenAddress, walletAddress) {
+  try {
+    if (tokenAddress === "native") {
+      const balance = await provider.getBalance(walletAddress)
+      return {
+        balance: ethers.formatEther(balance),
+        symbol: "TEA",
+        decimals: 18,
+      }
+    }
+
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
+
+    const [balance, decimals, symbol] = await Promise.all([
+      tokenContract.balanceOf(walletAddress),
+      tokenContract.decimals(),
+      tokenContract.symbol(),
+    ])
+
+    return {
+      balance: ethers.formatUnits(balance, decimals),
+      symbol,
+      decimals,
+    }
+  } catch (error) {
+    logError("Check Token Balance", error)
+    return {
+      balance: "Error",
+      symbol: "Unknown",
+      decimals: 18,
+    }
+  }
+}
+
 async function estimateTransactionTime(gasPrice) {
-  const baseTime = 15 // waktu dasar dalam detik
+  const baseTime = 15
   const gasPriceGwei = Number.parseFloat(ethers.formatUnits(gasPrice, "gwei"))
   const estimatedTime = baseTime * (10 / gasPriceGwei)
 
@@ -741,7 +1271,7 @@ async function estimateTransactionTime(gasPrice) {
 
 function calculateTotalEstimatedTime(totalTx, delayChoice, delayTime, randomDelayRange, batchSize) {
   let totalTime = 0
-  const baseTransactionTime = 15 // Asumsi waktu dasar per transaksi
+  const baseTransactionTime = 15
 
   if (delayChoice === 0) {
     totalTime = (totalTx / batchSize) * baseTransactionTime
@@ -763,66 +1293,41 @@ function calculateTotalEstimatedTime(totalTx, delayChoice, delayTime, randomDela
   }
 }
 
-// Fungsi untuk membatalkan nonce
 async function cancelNonce() {
   console.clear()
-  console.log(
-    chalk.hex("#00FFFF")(`
-                                ,        ,
-                                /(        )\`
-                                \\ \\___   / |
-                                /- _  \`-/  '
-                               (/\\/ \\ \\   /\\
-                               / /   | \`    \\
-                               O O   ) /    |
-                               \`-^--'\`<     '
-                   TM         (_.)  _  )   /
-|  | |\\  | ~|~ \\ /             \`.___/\`    /
-|  | | \\ |  |   X                \`-----' /
-\`__| |  \\| _|_ / \\  <----.     __ / __   \\
-                    <----|====O)))==) \\) /====
-                    <----'    \`--' \`.__,' \\
-                                 |        |
-                                  \\       /
-                             ______( (_  / \\______
-                           ,'  ,-----'   |        \\
-                           \`--{__________)        \\/
-                                      edosetiawan.eth
-  `),
-  )
+  
+  // Display ASCII art with animation
+  await displayAsciiArt();
 
   try {
-    console.log(chalk.hex("#FF00FF")("\n╔════════════════════════════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║       CANCEL NONCE - ASSAM TESTNET         ║"))
-    console.log(chalk.hex("#FF00FF")("╚════════════════════════════════════════════╝"))
-    console.log(chalk.hex("#00FFFF")("\n╔════════════════════════════════════════════╗"))
-    console.log(chalk.hex("#00FFFF")("║      AUTHOR : edosetiawan.eth              ║"))
-    console.log(chalk.hex("#00FFFF")("║      E-MAIL : edosetiawan.eth@gmail.com    ║"))
-    console.log(chalk.hex("#00FFFF")("║   INSTAGRAM : @edosetiawan.eth             ║"))
-    console.log(chalk.hex("#00FFFF")("║   TWITTER/X : @edosetiawan_eth             ║"))
-    console.log(chalk.hex("#00FFFF")("║      GITHUB : edosetiawan-xyz              ║"))
-    console.log(chalk.hex("#00FFFF")("║     DISCORD : edosetiawan.eth              ║"))
-    console.log(chalk.hex("#00FFFF")("╚════════════════════════════════════════════╝\n"))
+    console.log(gradients.rainbowGradient("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║                              CANCEL NONCE - ASSAM TESTNET                                   ║"))
+    console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════════════════════════════════════════════╝"))
+    console.log(getRandomGradient()("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                            AUTHOR : edosetiawan.eth                                        ║"))
+    console.log(getRandomGradient()("║                            E-MAIL : edosetiawan.eth@gmail.com                              ║"))
+    console.log(getRandomGradient()("║                         INSTAGRAM : @edosetiawan.eth                                       ║"))
+    console.log(getRandomGradient()("║                         TWITTER/X : @edosetiawan_eth                                       ║"))
+    console.log(getRandomGradient()("║                            GITHUB : edosetiawan-xyz                                        ║"))
+    console.log(getRandomGradient()("║                           DISCORD : edosetiawan.eth                                        ║"))
+    console.log(getRandomGradient()("╚════════════════════════════════════════════════════════════════════════════════════════════╝\n"))
 
-    // Pilih wallet untuk membatalkan nonce
-    console.log(chalk.hex("#FF00FF")("╔═════════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║      PILIH WALLET       ║"))
-    console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
+    console.log(gradients.rainbowGradient("╔═════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║      PILIH WALLET       ║"))
+    console.log(gradients.rainbowGradient("╚═════════════════════════╝\n"))
 
-    // Tampilkan daftar wallet
     wallets.forEach((wallet, index) => {
-      console.log(chalk.hex("#00FFFF")(`[${index + 1}] ${wallet.address}`))
+      console.log(getRandomGradient()(`[${index + 1}] ${wallet.address}`))
     })
-    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+    console.log(getRandomGradient()("[0] Kembali"))
 
-    // Pilih wallet
-    let selectedWallet
+    let selectedWallet = null
     while (true) {
-      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih wallet (0-" + wallets.length + "): "))
+      const input = readline.question(getRandomGradient()("\n➤ Pilih wallet (0-" + wallets.length + "): "))
       const choice = Number.parseInt(input)
 
       if (input.trim() === "0") {
-        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
         return
       }
 
@@ -831,55 +1336,50 @@ async function cancelNonce() {
         break
       }
 
-      console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
     }
 
-    // Dapatkan nonce saat ini
     const currentNonce = await provider.getTransactionCount(selectedWallet.address, "latest")
     const pendingNonce = await provider.getTransactionCount(selectedWallet.address, "pending")
 
-    console.log(chalk.hex("#00FFFF")(`\n💼 Wallet: ${selectedWallet.address}`))
-    console.log(chalk.hex("#00FFFF")(`🔢 Nonce saat ini: ${currentNonce}`))
-    console.log(chalk.hex("#00FFFF")(`🔢 Nonce pending: ${pendingNonce}`))
+    console.log(getRandomGradient()(`\n💼 Wallet: ${selectedWallet.address}`))
+    console.log(getRandomGradient()(`🔢 Nonce saat ini: ${currentNonce}`))
+    console.log(getRandomGradient()(`🔢 Nonce pending: ${pendingNonce}`))
 
     if (pendingNonce <= currentNonce) {
-      console.log(chalk.hex("#00FF00")("\n✅ Tidak ada transaksi pending untuk dibatalkan!"))
-      readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+      console.log(getRandomGradient()("\n✅ Tidak ada transaksi pending untuk dibatalkan!"))
+      readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
       return
     }
 
-    // Tampilkan transaksi pending
-    console.log(chalk.hex("#FFFF00")(`\n⚠️ Terdapat ${pendingNonce - currentNonce} transaksi pending`))
+    console.log(getRandomGradient()(`\n⚠️ Terdapat ${pendingNonce - currentNonce} transaksi pending`))
 
-    // Pilih nonce untuk dibatalkan
-    console.log(chalk.hex("#FF00FF")("\n╔═════════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║      PILIH NONCE        ║"))
-    console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
+    console.log(gradients.rainbowGradient("\n╔═════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║      PILIH NONCE        ║"))
+    console.log(gradients.rainbowGradient("╚═════════════════════════╝\n"))
 
-    console.log(chalk.hex("#00FFFF")("[1] Batalkan semua nonce pending"))
-    console.log(chalk.hex("#00FFFF")("[2] Batalkan nonce tertentu"))
-    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
+    console.log(getRandomGradient()("[1] Batalkan semua nonce pending"))
+    console.log(getRandomGradient()("[2] Batalkan nonce tertentu"))
+    console.log(getRandomGradient()("[0] Kembali"))
 
     const noncesToCancel = []
     while (true) {
-      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih opsi (0-2): "))
+      const input = readline.question(getRandomGradient()("\n➤ Pilih opsi (0-2): "))
       const choice = Number.parseInt(input)
 
       if (input.trim() === "0") {
-        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
         return
       }
 
       if (choice === 1) {
-        // Batalkan semua nonce pending
         for (let i = currentNonce; i < pendingNonce; i++) {
           noncesToCancel.push(i)
         }
         break
       } else if (choice === 2) {
-        // Batalkan nonce tertentu
         const nonceInput = readline.question(
-          chalk.hex("#00FFFF")(`Masukkan nonce yang ingin dibatalkan (${currentNonce}-${pendingNonce - 1}): `),
+          getRandomGradient()(`Masukkan nonce yang ingin dibatalkan (${currentNonce}-${pendingNonce - 1}): `),
         )
         const nonce = Number.parseInt(nonceInput)
 
@@ -888,30 +1388,28 @@ async function cancelNonce() {
           break
         }
 
-        console.log(chalk.hex("#FF3131")("❌ Nonce tidak valid! Silakan coba lagi."))
+        console.log(getRandomGradient()("❌ Nonce tidak valid! Silakan coba lagi."))
         continue
       }
 
-      console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
     }
 
-    // Konfirmasi pembatalan
     console.log(
-      chalk.hex("#FFFF00")(`\n⚠️ Akan membatalkan ${noncesToCancel.length} nonce: ${noncesToCancel.join(", ")}`),
+      getRandomGradient()(`\n⚠️ Akan membatalkan ${noncesToCancel.length} nonce: ${noncesToCancel.join(", ")}`),
     )
-    const confirm = readline.question(chalk.hex("#FFFF00")("Lanjutkan? (y/n): "))
+    const confirm = readline.question(getRandomGradient()("Lanjutkan? (y/n): "))
 
     if (confirm.toLowerCase() !== "y") {
-      console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
-      readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+      console.log(getRandomGradient()("❌ Operasi dibatalkan oleh user."))
+      readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
       return
     }
 
-    // Dapatkan gas parameters
-    const gasParams = await calculateGasParameters(50) // 50% lebih tinggi untuk memastikan cancel berhasil
+    const gasParams = await calculateGasParameters(50)
 
     console.log(
-      chalk.hex("#00FFFF")(
+      getRandomGradient()(
         `\n🚀 Membatalkan transaksi dengan ${
           gasParams.supportsEIP1559
             ? `maxPriorityFee: ${ethers.formatUnits(gasParams.maxPriorityFeePerGas, "gwei")} Gwei, maxFee: ${ethers.formatUnits(gasParams.maxFeePerGas, "gwei")} Gwei`
@@ -920,15 +1418,13 @@ async function cancelNonce() {
       ),
     )
 
-    // Proses pembatalan
     let successCount = 0
     let failCount = 0
 
     for (const nonce of noncesToCancel) {
       try {
-        console.log(chalk.hex("#FFFF00")(`\n⏳ Membatalkan nonce ${nonce}...`))
+        console.log(getRandomGradient()(`\n⏳ Membatalkan nonce ${nonce}...`))
 
-        // Buat transaksi pembatalan (0 value ke diri sendiri dengan nonce yang sama)
         const tx = {
           to: selectedWallet.address,
           value: 0n,
@@ -945,19 +1441,16 @@ async function cancelNonce() {
           gasLimit: 21000,
         }
 
-        // Kirim transaksi
         const response = await selectedWallet.sendTransaction(tx)
-        console.log(chalk.hex("#00FF00")(`✅ Transaksi pembatalan dikirim: ${response.hash}`))
+        console.log(createRandomGradient()(`✅ Transaksi pembatalan dikirim: ${response.hash}`))
 
-        // Tunggu konfirmasi
-        console.log(chalk.hex("#FFFF00")(`⏳ Menunggu konfirmasi...`))
+        console.log(getRandomGradient()(`⏳ Menunggu konfirmasi...`))
         const receipt = await response.wait()
 
         if (receipt && receipt.status === 1) {
-          console.log(chalk.hex("#00FF00")(`✅ Transaksi dengan nonce ${nonce} berhasil dibatalkan!`))
+          console.log(getRandomGradient()(`✅ Transaksi dengan nonce ${nonce} berhasil dibatalkan!`))
           successCount++
 
-          // Kirim notifikasi Telegram
           const message =
             `🚫 Nonce ${nonce} Dibatalkan\n` +
             `👛 Wallet: ${selectedWallet.address}\n` +
@@ -969,17 +1462,16 @@ async function cancelNonce() {
             }\n` +
             `⏰ Waktu: ${new Date().toLocaleString()}`
 
-          await sendTelegramMessage(message, response.hash)
+          await sendTelegramMessage(message)
         } else {
-          console.log(chalk.hex("#FF3131")(`❌ Pembatalan nonce ${nonce} gagal!`))
+          console.log(getRandomGradient()(`❌ Pembatalan nonce ${nonce} gagal!`))
           failCount++
         }
       } catch (error) {
-        console.log(chalk.hex("#FF3131")(`❌ Error saat membatalkan nonce ${nonce}: ${error.message}`))
+        console.log(getRandomGradient()(`❌ Error saat membatalkan nonce ${nonce}: ${error.message}`))
 
-        // Jika error karena nonce sudah digunakan, anggap berhasil
         if (error.message.includes("nonce has already been used")) {
-          console.log(chalk.hex("#00FF00")(`✅ Nonce ${nonce} sudah digunakan oleh transaksi lain.`))
+          console.log(getRandomGradient()(`✅ Nonce ${nonce} sudah digunakan oleh transaksi lain.`))
           successCount++
         } else {
           failCount++
@@ -987,14 +1479,12 @@ async function cancelNonce() {
       }
     }
 
-    // Tampilkan ringkasan
-    console.log(chalk.hex("#00FF00")("\n✅ Proses pembatalan nonce selesai!"))
-    console.log(chalk.hex("#00FF00")(`✅ Berhasil: ${successCount}`))
+    console.log(getRandomGradient()("\n✅ Proses pembatalan nonce selesai!"))
+    console.log(getRandomGradient()(`✅ Berhasil: ${successCount}`))
     if (failCount > 0) {
-      console.log(chalk.hex("#FF3131")(`❌ Gagal: ${failCount}`))
+      console.log(getRandomGradient()(`❌ Gagal: ${failCount}`))
     }
 
-    // Kirim notifikasi ringkasan ke Telegram
     const summaryMessage =
       `📊 Ringkasan Pembatalan Nonce\n` +
       `👛 Wallet: ${selectedWallet.address}\n` +
@@ -1004,352 +1494,537 @@ async function cancelNonce() {
 
     await sendTelegramMessage(summaryMessage)
 
-    // Tunggu user sebelum kembali ke menu utama
-    readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+    readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
   } catch (error) {
     logError("Cancel Nonce", error)
-    console.error(chalk.hex("#FF1493")(`❌ Error: ${error.message}`))
-    readline.question(chalk.hex("#00FFFF")("\nTekan Enter untuk kembali ke menu utama..."))
+    console.error(getRandomGradient()(`❌ Error: ${error.message}`))
+    readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
+  }
+}
+
+async function checkTokenBalances() {
+  console.clear()
+  
+  // Display ASCII art with animation
+  await displayAsciiArt();
+
+  try {
+    console.log(gradients.rainbowGradient("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║                                 CEK SALDO - ASSAM TESTNET                                   ║"))
+    console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════════════════════════════════════════════╝"))
+    console.log(getRandomGradient()("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+    console.log(getRandomGradient()("║                            AUTHOR : edosetiawan.eth                                        ║"))
+    console.log(getRandomGradient()("║                            E-MAIL : edosetiawan.eth@gmail.com                              ║"))
+    console.log(getRandomGradient()("║                         INSTAGRAM : @edosetiawan.eth                                       ║"))
+    console.log(getRandomGradient()("║                         TWITTER/X : @edosetiawan_eth                                       ║"))
+    console.log(getRandomGradient()("║                            GITHUB : edosetiawan-xyz                                        ║"))
+    console.log(getRandomGradient()("║                           DISCORD : edosetiawan.eth                                        ║"))
+    console.log(getRandomGradient()("╚════════════════════════════════════════════════════════════════════════════════════════════╝\n"))
+
+    console.log(gradients.rainbowGradient("╔═════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║      PILIH WALLET       ║"))
+    console.log(gradients.rainbowGradient("╚═════════════════════════╝\n"))
+
+    wallets.forEach((wallet, index) => {
+      console.log(getRandomGradient()(`[${index + 1}] ${wallet.address}`))
+    })
+    console.log(getRandomGradient()("[0] Kembali"))
+
+    let selectedWallet = null
+    while (true) {
+      const input = readline.question(getRandomGradient()("\n➤ Pilih wallet (0-" + wallets.length + "): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+        return
+      }
+
+      if (!isNaN(choice) && choice > 0 && choice <= wallets.length) {
+        selectedWallet = wallets[choice - 1]
+        break
+      }
+
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+
+    console.log(gradients.rainbowGradient("\n╔═════════════════════════╗"))
+    console.log(gradients.rainbowGradient("║      PILIH TOKEN        ║"))
+    console.log(gradients.rainbowGradient("╚═════════════════════════╝\n"))
+
+    console.log(getRandomGradient()("[1] TEA (Native Token)"))
+    console.log(getRandomGradient()("[2] BTC (Assam BTC)"))
+    console.log(getRandomGradient()("[3] MTT (MeowTea Token)"))
+    console.log(getRandomGradient()("[4] TDI (TeaDogs INU)"))
+    console.log(getRandomGradient()("[5] Cek Semua Token"))
+    console.log(getRandomGradient()("[0] Kembali"))
+
+    while (true) {
+      const input = readline.question(getRandomGradient()("\n➤ Pilih token (0-5): "))
+      const choice = Number.parseInt(input)
+
+      if (input.trim() === "0") {
+        console.log(getRandomGradient()("⬅️ Kembali ke menu sebelumnya."))
+        return
+      }
+
+      if (!isNaN(choice) && choice >= 1 && choice <= 5) {
+        console.log(getRandomGradient()("\n⏳ Memeriksa saldo..."))
+
+        if (choice === 5) {
+          console.log(getRandomGradient()("\n╔═════════════════════════════════════════════════════════════════════════╗"))
+          console.log(getRandomGradient()("║                        SALDO SEMUA TOKEN                                ║"))
+          console.log(getRandomGradient()("╚═════════════════════════════════════════════════════════════════════════╝\n"))
+
+          console.log(getRandomGradient()(`👛 Wallet: ${selectedWallet.address}\n`))
+
+          const teaResult = await checkTokenBalance("native", selectedWallet.address)
+          console.log(getRandomGradient()(`💰 TEA: ${teaResult.balance} ${teaResult.symbol}`))
+
+          const btcResult = await checkTokenBalance(tokens.BTC, selectedWallet.address)
+          console.log(getRandomGradient()(`💰 BTC: ${btcResult.balance} ${btcResult.symbol}`))
+
+          const mttResult = await checkTokenBalance(tokens.MTT, selectedWallet.address)
+          console.log(getRandomGradient()(`💰 MTT: ${mttResult.balance} ${mttResult.symbol}`))
+
+          const tdiResult = await checkTokenBalance(tokens.TDI, selectedWallet.address)
+          console.log(getRandomGradient()(`💰 TDI: ${tdiResult.balance} ${tdiResult.symbol}`))
+
+          const message =
+            `💰 Saldo Token\n` +
+            `👛 Wallet: ${selectedWallet.address}\n` +
+            `\n` +
+            `TEA: ${teaResult.balance} ${teaResult.symbol}\n` +
+            `BTC: ${btcResult.balance} ${btcResult.symbol}\n` +
+            `MTT: ${mttResult.balance} ${mttResult.symbol}\n` +
+            `TDI: ${tdiResult.balance} ${tdiResult.symbol}\n` +
+            `\n` +
+            `⏰ Waktu: ${new Date().toLocaleString()}`
+
+          await sendTelegramMessage(message)
+        } else {
+          const tokenSymbols = ["TEA", "BTC", "MTT", "TDI"]
+          const tokenAddresses = ["native", tokens.BTC, tokens.MTT, tokens.TDI]
+
+          const selectedTokenSymbol = tokenSymbols[choice - 1]
+          const selectedTokenAddress = tokenAddresses[choice - 1]
+
+          console.log(getRandomGradient()(`\n╔═════════════════════════════════════════════════════════════════════════╗`))
+          console.log(getRandomGradient()(`║                    SALDO ${selectedTokenSymbol.padEnd(35, " ")}║`))
+          console.log(getRandomGradient()(`╚═════════════════════════════════════════════════════════════════════════╝\n`))
+
+          console.log(getRandomGradient()(`👛 Wallet: ${selectedWallet.address}\n`))
+
+          const result = await checkTokenBalance(selectedTokenAddress, selectedWallet.address)
+          console.log(getRandomGradient()(`💰 ${selectedTokenSymbol}: ${result.balance} ${result.symbol}`))
+
+          const message =
+            `💰 Saldo ${selectedTokenSymbol}\n` +
+            `👛 Wallet: ${selectedWallet.address}\n` +
+            `\n` +
+            `${selectedTokenSymbol}: ${result.balance} ${result.symbol}\n` +
+            `\n` +
+            `⏰ Waktu: ${new Date().toLocaleString()}`
+
+          await sendTelegramMessage(message)
+        }
+
+        readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
+        return
+      }
+
+      console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
+    }
+  } catch (error) {
+    logError("Check Token Balances", error)
+    console.error(getRandomGradient()(`❌ Error: ${error.message}`))
+    readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
+  }
+}
+
+async function processTokenTransfer(tokenSymbol, tokenAddress) {
+  try {
+    // Pilih file CSV
+    const fileOption = selectCSVFile()
+    if (fileOption === null) {
+      return
+    }
+
+    let processedData
+
+    if (fileOption === "manual_input") {
+      processedData = inputManualAddresses()
+
+      if (!processedData) {
+        return
+      }
+
+      console.log(getRandomGradient()(`📊 Total transaksi: ${processedData.length}`))
+    } else {
+      console.log(getRandomGradient()(`📂 File yang dipilih: ${fileOption}`))
+
+      const filePath = path.resolve(fileOption)
+      if (!fs.existsSync(filePath)) {
+        throw new Error("File tidak ditemukan!")
+      }
+
+      processedData = processCSVFile(filePath)
+
+      if (!processedData) {
+        return
+      }
+
+      console.log(getRandomGradient()(`📊 Total transaksi: ${processedData.length}`))
+    }
+
+    const wallet = wallets[0]
+
+    // Tampilkan saldo semua token
+    const teaBalance = await checkTeaBalance(wallet.address)
+    console.log(getRandomGradient()(`💰 Saldo $TEA: ${teaBalance} TEA`))
+
+    const btcResult = await checkTokenBalance(tokens.BTC, wallet.address)
+    console.log(getRandomGradient()(`💰 Saldo $BTC: ${btcResult.balance} ${btcResult.symbol}`))
+
+    const mttResult = await checkTokenBalance(tokens.MTT, wallet.address)
+    console.log(getRandomGradient()(`💰 Saldo $MTT: ${mttResult.balance} ${mttResult.symbol}`))
+
+    const tdiResult = await checkTokenBalance(tokens.TDI, wallet.address)
+    console.log(getRandomGradient()(`💰 Saldo $TDI: ${tdiResult.balance} ${tdiResult.symbol}`))
+
+    // Cek informasi jaringan
+    const feeData = await provider.getFeeData()
+    const supportsEIP1559 = !!feeData.maxFeePerGas
+    console.log(getRandomGradient()(`🔧 Jaringan ${supportsEIP1559 ? "mendukung" : "tidak mendukung"} EIP-1559`))
+
+    if (supportsEIP1559) {
+      console.log(
+        getRandomGradient()(
+          `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
+            `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
+        ),
+      )
+    } else {
+      console.log(getRandomGradient()(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`))
+    }
+
+    const congestion = await checkNetworkCongestion()
+    if (congestion.congested) {
+      console.log(
+        getRandomGradient()(
+          `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
+        ),
+      )
+    }
+
+    // Pilih jumlah retry
+    const retryCount = chooseRetryCount()
+    if (retryCount === null) {
+      return
+    }
+
+    // Pilih mode jeda
+    const delayChoice = chooseTransactionDelay()
+    if (delayChoice === null) {
+      return
+    }
+
+    let delayTime = 0
+    let randomDelayRange = { min: 0, max: 0 }
+    let batchSize = 1
+
+    if (delayChoice === 0) {
+      console.log(getRandomGradient()("Transaksi akan dilakukan tanpa jeda."))
+      console.log(
+        getRandomGradient()("⚠️ Direkomendasikan 1-100 batch pertransaksi. Jika melewati itu akan terjadi error."),
+      )
+      batchSize = chooseBatchSize()
+      if (batchSize === null) {
+        return
+      }
+      console.log(getRandomGradient()(`Batch size: ${batchSize} transaksi per batch`))
+    } else if (delayChoice === 1) {
+      delayTime = setManualDelay()
+      if (delayTime === null) {
+        return
+      }
+      console.log(getRandomGradient()(`ℹ️ Mode: Jeda Manual ${delayTime} detik`))
+    } else if (delayChoice === 2) {
+      randomDelayRange = setRandomDelayRange()
+      if (randomDelayRange === null) {
+        return
+      }
+      console.log(getRandomGradient()(`ℹ️ Mode: Jeda Acak ${randomDelayRange.min}-${randomDelayRange.max} detik`))
+    }
+
+    // Estimasi waktu total
+    const totalEstimatedTime = calculateTotalEstimatedTime(
+      processedData.length,
+      delayChoice,
+      delayTime,
+      randomDelayRange,
+      batchSize,
+    )
+    console.log(getRandomGradient()(`⏱️ Estimasi waktu total: ${totalEstimatedTime}`))
+
+    // Set delay notifikasi Telegram
+    setTelegramDelay()
+
+    // Konfirmasi sebelum memulai transaksi
+    const confirm = readline.question(getRandomGradient()("\nApakah Anda yakin ingin memulai transaksi? (y/n): "))
+    if (confirm.toLowerCase() !== "y") {
+      console.log(getRandomGradient()("❌ Operasi dibatalkan oleh user."))
+      return
+    }
+
+    let successCount = 0
+    let failCount = 0
+    let reportData = "address,quantity,status\n"
+
+    const totalTx = processedData.length
+
+    // Memuat checkpoint
+    const checkpoint = loadCheckpoint()
+
+    // Dapatkan nonce awal
+    let nonce = await getValidNonce(wallet, true)
+    console.log(getRandomGradient()(`🔢 Nonce awal: ${nonce}`))
+
+    // Inisialisasi daftar transaksi yang berhasil dan gagal untuk session ini
+    const sessionSuccessful = new Set()
+    const sessionFailed = new Set()
+
+    for (let i = checkpoint; i < totalTx; i += batchSize) {
+      const batch = processedData.slice(i, i + batchSize)
+      const promises = batch.map(async (row, index) => {
+        const [address, amount] = row.split(",").map((x) => x.trim())
+
+        if (!ethers.isAddress(address)) {
+          reportData += `${address},${amount},invalid_address\n`
+          return
+        }
+
+        if (sessionSuccessful.has(address)) {
+          console.log(getRandomGradient()(`⚠️ Transaksi ke ${address} sudah sukses dalam session ini. Dilewati.`))
+          return
+        }
+        if (sessionFailed.has(address)) {
+          console.log(getRandomGradient()(`⚠️ Transaksi ke ${address} sudah gagal dalam session ini. Dilewati.`))
+          return
+        }
+
+        const txNonce = nonce + index
+
+        await checkStuckTransactions(wallet)
+
+        const result = await sendTransactionWithRetry(
+          wallet,
+          tokenAddress,
+          address,
+          amount,
+          tokenSymbol,
+          i + index,
+          totalTx,
+          txNonce,
+          retryCount,
+        )
+
+        if (result === "SUKSES") {
+          successCount++
+          sessionSuccessful.add(address)
+          reportData += `${address},${amount},sukses\n`
+        } else {
+          failCount++
+          sessionFailed.add(address)
+          reportData += `${address},${amount},gagal\n`
+        }
+      })
+
+      await Promise.all(promises)
+      nonce += batch.length
+
+      if (i + batchSize < totalTx) {
+        nonce = await getValidNonce(wallet, true)
+        console.log(getRandomGradient()(`🔢 Nonce terbaru: ${nonce}`))
+      }
+
+      saveCheckpoint(i + batchSize)
+      console.log(
+        getRandomGradient()(
+          `🚀 Progress: ${Math.min(i + batchSize, totalTx)}/${totalTx} (${Math.round(
+            (Math.min(i + batchSize, totalTx) / totalTx) * 100,
+          )}%)`,
+        ),
+      )
+
+      if (i < totalTx - batchSize && delayChoice !== 0) {
+        await applyDelay(delayChoice, delayTime, randomDelayRange, i, totalTx)
+      }
+
+      if ((i + 1) % 10 === 0) {
+        const updatedTeaBalance = await checkTeaBalance(wallet.address)
+        console.log(getRandomGradient()(`💰 Saldo $TEA terbaru: ${updatedTeaBalance} TEA`))
+      }
+
+      if ((i + 1) % 5 === 0) {
+        const feeData = await provider.getFeeData()
+        if (feeData.maxFeePerGas) {
+          console.log(
+            getRandomGradient()(
+              `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
+                `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
+            ),
+          )
+        } else {
+          console.log(
+            getRandomGradient()(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`),
+          )
+        }
+
+        const congestion = await checkNetworkCongestion()
+        if (congestion.congested) {
+          console.log(
+            getRandomGradient()(
+              `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
+            ),
+          )
+        }
+      }
+    }
+
+    console.log(getRandomGradient()("\n✅ Semua transaksi selesai!\n"))
+
+    const finalReport = `✅ Laporan Transaksi:
+Sukses: ${successCount}
+Gagal: ${failCount}`
+    await sendTelegramMessage(finalReport)
+    console.log(getRandomGradient()(finalReport))
+
+    fs.writeFileSync("report.csv", reportData)
+    console.log(getRandomGradient()("📊 Laporan telah disimpan dalam file report.csv"))
+
+    try {
+      const filename = `transaksi_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`
+      await sendTelegramCSV(reportData, filename)
+    } catch (error) {
+      console.log(getRandomGradient()(`⚠️ Gagal mengirim file CSV ke Telegram: ${error.message}`))
+    }
+
+    readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
+  } catch (error) {
+    logError("Process Token Transfer", error)
+    console.error(getRandomGradient()(`❌ Error: ${error.message}`))
+    readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
   }
 }
 
 async function main() {
-  console.clear()
-  console.log(
-    chalk.hex("#00FFFF")(`
-                                ,        ,
-                                /(        )\`
-                                \\ \\___   / |
-                                /- _  \`-/  '
-                               (/\\/ \\ \\   /\\
-                               / /   | \`    \\
-                               O O   ) /    |
-                               \`-^--'\`<     '
-                   TM         (_.)  _  )   /
-|  | |\\  | ~|~ \\ /             \`.___/\`    /
-|  | | \\ |  |   X                \`-----' /
-\`__| |  \\| _|_ / \\  <----.     __ / __   \\
-                    <----|====O)))==) \\) /====
-                    <----'    \`--' \`.__,' \\
-                                 |        |
-                                  \\       /
-                             ______( (_  / \\______
-                           ,'  ,-----'   |        \\
-                           \`--{__________)        \\/
-                                      edosetiawan.eth
-  `),
-  )
+  while (true) {
+    console.clear()
+    
+    // Display ASCII art with animation
+    await displayAsciiArt();
 
-  try {
-    console.log(chalk.hex("#FF00FF")("\n╔════════════════════════════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║       MULTISENDER - ASSAM TESTNET          ║"))
-    console.log(chalk.hex("#FF00FF")("╚════════════════════════════════════════════╝"))
-    console.log(chalk.hex("#00FFFF")("\n╔════════════════════════════════════════════╗"))
-    console.log(chalk.hex("#00FFFF")("║      AUTHOR : edosetiawan.eth              ║"))
-    console.log(chalk.hex("#00FFFF")("║      E-MAIL : edosetiawan.eth@gmail.com    ║"))
-    console.log(chalk.hex("#00FFFF")("║   INSTAGRAM : @edosetiawan.eth             ║"))
-    console.log(chalk.hex("#00FFFF")("║   TWITTER/X : @edosetiawan_eth             ║"))
-    console.log(chalk.hex("#00FFFF")("║      GITHUB : edosetiawan-xyz              ║"))
-    console.log(chalk.hex("#00FFFF")("║     DISCORD : edosetiawan.eth              ║"))
-    console.log(chalk.hex("#00FFFF")("╚════════════════════════════════════════════╝\n"))
+    try {
+      // Refresh gradients on each menu display for random colors
+      refreshGradients();
+      
+      console.log(gradients.rainbowGradient("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+      console.log(gradients.rainbowGradient("║                              MULTISENDER - ASSAM TESTNET                                   ║"))
+      console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════════════════════════════════════════════╝"))
+      console.log(getRandomGradient()("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
+      console.log(getRandomGradient()("║                            AUTHOR : edosetiawan.eth                                        ║"))
+      console.log(getRandomGradient()("║                            E-MAIL : edosetiawan.eth@gmail.com                              ║"))
+      console.log(getRandomGradient()("║                         INSTAGRAM : @edosetiawan.eth                                       ║"))
+      console.log(getRandomGradient()("║                         TWITTER/X : @edosetiawan_eth                                       ║"))
+      console.log(getRandomGradient()("║                            GITHUB : edosetiawan-xyz                                        ║"))
+      console.log(getRandomGradient()("║                           DISCORD : edosetiawan.eth                                        ║"))
+      console.log(getRandomGradient()("╚════════════════════════════════════════════════════════════════════════════════════════════╝\n"))
 
-    console.log(chalk.hex("#FF00FF")("╔═════════════════════════╗"))
-    console.log(chalk.hex("#FF00FF")("║          MENU           ║"))
-    console.log(chalk.hex("#FF00FF")("╠═════════════════════════╣"))
-    console.log(chalk.hex("#00FFFF")("║ [1] Bitcoin - BTC       ║"))
-    console.log(chalk.hex("#00FFFF")("║ [2] MeowTea Token - MTT ║"))
-    console.log(chalk.hex("#00FFFF")("║ [3] TeaDogs INU - TDI   ║"))
-    console.log(chalk.hex("#00FFFF")("║ [4] Kirim Token Manual  ║"))
-    console.log(chalk.hex("#00FFFF")("║ [5] Cancel Nonce        ║"))
-    console.log(chalk.hex("#FF1493")("║ [0] CANCEL              ║"))
-    console.log(chalk.hex("#FF00FF")("╚═════════════════════════╝\n"))
+      console.log(gradients.rainbowGradient("╔════════════════════════════════════════════════════╗"))
+      console.log(gradients.rainbowGradient("║                      MENU                          ║"))
+      console.log(gradients.rainbowGradient("╠════════════════════════════════════════════════════╣"))
+      console.log(getRandomGradient()("║ [1] Bitcoin - BTC                                  ║"))
+      console.log(getRandomGradient()("║ [2] MeowTea Token - MTT                            ║"))
+      console.log(getRandomGradient()("║ [3] TeaDogs INU - TDI                              ║"))
+      console.log(getRandomGradient()("║ [4] Kirim Token Manual                             ║"))
+      console.log(getRandomGradient()("║ [5] Cancel Nonce                                   ║"))
+      console.log(getRandomGradient()("║ [6] Cek Saldo Token                                ║"))
+      console.log(getRandomGradient()("║ [0] Keluar                                         ║"))
+      console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════╝\n"))
 
-    const tokenOptions = Object.keys(tokens)
-    tokenOptions.forEach((token, index) => {
-      console.log(chalk.hex("#00FFFF")(`[${index + 1}] ${token}`))
-    })
-    console.log(chalk.hex("#00FFFF")("[4] Kirim Token Manual"))
-    console.log(chalk.hex("#00FFFF")("[5] Cancel Nonce"))
-    console.log(chalk.hex("#FF1493")("[0] CANCEL"))
-
-    while (true) {
-      const input = readline.question(chalk.hex("#00FFFF")("\n➤ Pilih opsi (0-5): "))
+      const input = readline.question(getRandomGradient()("\n➤ Pilih opsi (0-6): "))
       const choice = Number.parseInt(input)
 
       if (input.trim() === "0") {
-        console.log(chalk.hex("#FF1493")("❌ Operasi dibatalkan oleh user."))
+        console.log(getRandomGradient()("⬅️ Keluar dari program."))
         process.exit(0)
       }
 
       let tokenSymbol, tokenAddress
 
-      if (choice === 5) {
-        // Fitur Cancel Nonce
+      if (choice === 6) {
+        await checkTokenBalances()
+      } else  tokenAddress
+
+      if (choice === 6) {
+        await checkTokenBalances()
+      } else if (choice === 5) {
         await cancelNonce()
-        // Kembali ke menu utama setelah selesai
-        main().catch((err) => {
-          console.error(chalk.hex("#FF1493")(`❌ Error: ${err.message}`))
-          process.exit(1)
-        })
-        return
       } else if (choice === 4) {
-        // Kirim Token Manual
-        tokenAddress = readline.question(chalk.hex("#00FFFF")("Masukkan alamat smart contract token: "))
-        tokenSymbol = readline.question(chalk.hex("#00FFFF")("Masukkan simbol token: "))
-      } else if (!isNaN(choice) && choice > 0 && choice <= tokenOptions.length) {
+        tokenAddress = readline.question(getRandomGradient()("Masukkan alamat smart contract token: "))
+        tokenSymbol = readline.question(getRandomGradient()("Masukkan simbol token: "))
+        await processTokenTransfer(tokenSymbol, tokenAddress)
+      } else if (choice >= 1 && choice <= 3) {
+        const tokenOptions = ["BTC", "MTT", "TDI"]
         tokenSymbol = tokenOptions[choice - 1]
         tokenAddress = tokens[tokenSymbol]
+        await processTokenTransfer(tokenSymbol, tokenAddress)
       } else {
-        console.log(chalk.hex("#FF3131")("❌ Pilihan tidak valid! Silakan coba lagi."))
-        continue
+        console.log(getRandomGradient()("❌ Pilihan tidak valid! Silakan coba lagi."))
+        await new Promise((resolve) => setTimeout(resolve, 2000))
       }
-
-      const fileName = selectCSVFile()
-      console.log(chalk.hex("#00FFFF")(`📂 File yang dipilih: ${chalk.hex("#FF00FF")(fileName)}`))
-
-      const filePath = path.resolve(fileName)
-      if (!fs.existsSync(filePath)) {
-        throw new Error("File tidak ditemukan!")
-      }
-
-      let data = fs.readFileSync(filePath, "utf8").trim().split("\n")
-
-      if (data.length > 0 && data[0].toLowerCase().includes("quantity")) {
-        console.log(chalk.hex("#FFFF00")("⚠️ Melewati baris pertama karena berisi header"))
-        data = data.slice(1)
-      }
-
-      console.log(chalk.hex("#00FFFF")(`📊 Total transaksi: ${chalk.hex("#FF00FF")(data.length)}`))
-
-      // Cek saldo $TEA dan tampilkan estimasi waktu
-      const wallet = wallets[0]
-      const teaBalance = await checkTeaBalance(wallet.address)
-      console.log(chalk.hex("#00FFFF")(`💰 Saldo $TEA: ${teaBalance} TEA`))
-
-      // Cek apakah jaringan mendukung EIP-1559
-      const feeData = await provider.getFeeData()
-      const supportsEIP1559 = !!feeData.maxFeePerGas
-      console.log(chalk.hex("#00FFFF")(`🔧 Jaringan ${supportsEIP1559 ? "mendukung" : "tidak mendukung"} EIP-1559`))
-
-      if (supportsEIP1559) {
-        console.log(
-          chalk.hex("#00FFFF")(
-            `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
-              `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
-          ),
-        )
-      } else {
-        console.log(chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`))
-      }
-
-      // Cek network congestion
-      const congestion = await checkNetworkCongestion()
-      if (congestion.congested) {
-        console.log(
-          chalk.hex("#FFFF00")(
-            `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
-          ),
-        )
-      }
-
-      const retryCount = chooseRetryCount()
-      const delayChoice = chooseTransactionDelay()
-      let delayTime = 0
-      let randomDelayRange = { min: 0, max: 0 }
-      let batchSize = 1
-
-      if (delayChoice === 0) {
-        // Tanpa Jeda
-        console.log(chalk.hex("#00FFFF")("Transaksi akan dilakukan tanpa jeda."))
-        console.log(
-          chalk.hex("#FFFF00")("⚠️ Direkomendasikan 1-100 batch pertransaksi. Jika melewati itu akan terjadi error."),
-        )
-        batchSize = chooseBatchSize()
-        console.log(chalk.hex("#00FFFF")(`Batch size: ${batchSize} transaksi per batch`))
-      } else if (delayChoice === 1) {
-        delayTime = setManualDelay()
-        console.log(chalk.hex("#00FFFF")(`ℹ️ Mode: Jeda Manual ${delayTime} detik`))
-      } else if (delayChoice === 2) {
-        randomDelayRange = setRandomDelayRange()
-        console.log(chalk.hex("#00FFFF")(`ℹ️ Mode: Jeda Acak ${randomDelayRange.min}-${randomDelayRange.max} detik`))
-      }
-
-      // Menghitung dan menampilkan estimasi waktu total
-      const totalEstimatedTime = calculateTotalEstimatedTime(
-        data.length,
-        delayChoice,
-        delayTime,
-        randomDelayRange,
-        batchSize,
-      )
-      console.log(chalk.hex("#00FFFF")(`⏱️ Estimasi waktu total: ${totalEstimatedTime}`))
-
-      setTelegramDelay()
-
-      let successCount = 0
-      let failCount = 0
-      let reportData = "Address,Amount,Status\n"
-
-      const totalTx = data.length
-
-      // Memuat checkpoint
-      const checkpoint = loadCheckpoint()
-
-      // Dapatkan nonce awal
-      let nonce = await getValidNonce(wallet, true)
-      console.log(chalk.hex("#00FFFF")(`🔢 Nonce awal: ${nonce}`))
-
-      // Inisialisasi daftar transaksi yang berhasil dan gagal untuk session ini
-      const sessionSuccessful = new Set()
-      const sessionFailed = new Set()
-
-      for (let i = checkpoint; i < totalTx; i += batchSize) {
-        const batch = data.slice(i, i + batchSize)
-        const promises = batch.map(async (row, index) => {
-          const [address, amount] = row.split(",").map((x) => x.trim())
-
-          if (!ethers.isAddress(address) || isNaN(amount) || amount <= 0) {
-            console.log(chalk.hex("#FF3131")(`❌ Baris ${i + index + 1} diabaikan: Format salah`))
-            return
-          }
-
-          // Cek apakah transaksi sudah dilakukan dalam session ini
-          if (sessionSuccessful.has(address)) {
-            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah sukses dalam session ini. Dilewati.`))
-            return
-          }
-          if (sessionFailed.has(address)) {
-            console.log(chalk.hex("#FFFF00")(`⚠️ Transaksi ke ${address} sudah gagal dalam session ini. Dilewati.`))
-            return
-          }
-
-          // Dapatkan nonce baru untuk setiap transaksi
-          const txNonce = nonce + index
-
-          // Cek dan tangani transaksi yang stuck sebelum mengirim yang baru
-          await checkStuckTransactions(wallet)
-
-          const result = await sendTransactionWithRetry(
-            wallet,
-            tokenAddress,
-            address,
-            amount,
-            tokenSymbol,
-            i + index,
-            totalTx,
-            txNonce,
-            retryCount,
-          )
-
-          if (result === "SUKSES") {
-            successCount++
-            sessionSuccessful.add(address)
-            reportData += `${address},${amount},SUKSES\n`
-          } else {
-            failCount++
-            sessionFailed.add(address)
-            reportData += `${address},${amount},GAGAL\n`
-          }
-        })
-
-        await Promise.all(promises)
-        nonce += batch.length
-
-        // Dapatkan nonce terbaru setelah setiap batch untuk memastikan sinkronisasi
-        if (i + batchSize < totalTx) {
-          nonce = await getValidNonce(wallet, true)
-          console.log(chalk.hex("#00FFFF")(`🔢 Nonce terbaru: ${nonce}`))
-        }
-
-        saveCheckpoint(i + batchSize) // Simpan checkpoint setelah setiap batch
-        console.log(
-          chalk.hex("#00FFFF")(
-            `🚀 Progress: ${chalk.hex("#FF00FF")(`${Math.min(i + batchSize, totalTx)}/${totalTx}`)} (${Math.round((Math.min(i + batchSize, totalTx) / totalTx) * 100)}%)`,
-          ),
-        )
-
-        if (i < totalTx - batchSize && delayChoice !== 0) {
-          await applyDelay(delayChoice, delayTime, randomDelayRange, i, totalTx)
-        }
-
-        // Update saldo $TEA setiap 10 transaksi
-        if ((i + 1) % 10 === 0) {
-          const updatedTeaBalance = await checkTeaBalance(wallet.address)
-          console.log(chalk.hex("#00FFFF")(`💰 Saldo $TEA terbaru: ${updatedTeaBalance} TEA`))
-        }
-
-        // Tampilkan gas price terbaru dan cek network congestion setiap 5 transaksi
-        if ((i + 1) % 5 === 0) {
-          const feeData = await provider.getFeeData()
-          if (feeData.maxFeePerGas) {
-            console.log(
-              chalk.hex("#00FFFF")(
-                `⛽ Base Fee: ${ethers.formatUnits(feeData.lastBaseFeePerGas || 0n, "gwei")} Gwei, ` +
-                  `Priority Fee: ${ethers.formatUnits(feeData.maxPriorityFeePerGas || 0n, "gwei")} Gwei`,
-              ),
-            )
-          } else {
-            console.log(
-              chalk.hex("#00FFFF")(`⛽ Gas Price saat ini: ${ethers.formatUnits(feeData.gasPrice, "gwei")} Gwei`),
-            )
-          }
-
-          // Cek network congestion
-          const congestion = await checkNetworkCongestion()
-          if (congestion.congested) {
-            console.log(
-              chalk.hex("#FFFF00")(
-                `⚠️ Jaringan sedang padat (level ${congestion.level}), transaksi mungkin membutuhkan gas lebih tinggi`,
-              ),
-            )
-          }
-        }
-      }
-
-      console.log(chalk.hex("#00FF00")("\n✅ Semua transaksi selesai!\n"))
-
-      const finalReport = `✅ Laporan Transaksi:\\nSukses: ${successCount}\\nGagal: ${failCount}`
-      await sendTelegramMessage(finalReport)
-      console.log(chalk.hex("#FF00FF")(finalReport))
-
-      fs.writeFileSync("report.csv", reportData)
-      console.log(chalk.hex("#00FFFF")("📊 Laporan telah disimpan dalam file report.csv"))
-      break
+    } catch (error) {
+      logError("Main Execution", error)
+      console.error(getRandomGradient()(`❌ Error: ${error.message}`))
+      readline.question(getRandomGradient()("\nTekan Enter untuk kembali ke menu utama..."))
     }
-  } catch (error) {
-    logError("Main Execution", error)
-    console.error(chalk.hex("#FF1493")(`❌ Error: ${error.message}`))
   }
 }
 
+// Display ending message with different gradient colors
+function displayEndingMessage() {
+  console.log(getRandomGradient()("✨✨✨ Terima kasih telah menggunakan script ini! ✨✨✨"));
+  console.log(getRandomGradient()("================================================================================================"));
+  console.log(getRandomGradient()("        ⚠️  PERINGATAN HAK CIPTA ⚠️        "));
+  console.log(getRandomGradient()("================================================================================================"));
+  console.log(
+    getRandomGradient()("DILARANG KERAS ") +
+    getRandomGradient()("menyalin, mendistribusikan, atau menggunakan kode dalam script ini tanpa izin dari ") +
+    getRandomGradient()("edosetiawan.eth") +
+    getRandomGradient()(" Segala bentuk duplikasi tanpa izin akan dianggap sebagai pelanggaran hak cipta")
+  );
+  console.log(getRandomGradient()("================================================================================================"));
+  console.log(getRandomGradient()("        ✅ PENGGUNAAN RESMI ✅        "));
+  console.log(getRandomGradient()("================================================================================================"));
+  console.log(
+    getRandomGradient()(
+      "Script ini hanya boleh digunakan oleh pemilik resmi yang telah diberikan akses. Jika Anda bukan pengguna resmi, segera hubungi "
+    ) +
+    getRandomGradient()("edosetiawan.eth") +
+    getRandomGradient()(" untuk validasi.")
+  );
+}
+
+// Register ending message to be displayed on exit
+process.on("exit", displayEndingMessage);
+
 process.on("SIGINT", () => {
-  console.log(chalk.hex("#FFFF00")("\n\n⚠️ Program dihentikan oleh user."))
+  console.log(getRandomGradient()("\n\n⚠️ Program dihentikan oleh user."))
   process.exit(0)
 })
 
 main().catch((err) => {
-  console.error(chalk.hex("#FF1493")(`❌ Error: ${err.message}`))
+  console.error(getRandomGradient()(`❌ Error: ${err.message}`))
   process.exit(1)
 })
-
-console.log(chalk.hex("#FF00FF")("✨ Script optimized token transfer has been executed."));
-console.log(chalk.greenBright("✨")); // Menampilkan emoji ✨ dengan warna hijau terang
-console.log(chalk.greenBright("================================================================================================"));
-console.log(chalk.bold.green("        ⚠️  PERINGATAN HAK CIPTA ⚠️        "));
-console.log(chalk.greenBright("================================================================================================"));
-console.log(
-  chalk.redBright.bold("DILARANG KERAS ") +
-  chalk.redBright("menyalin, mendistribusikan, atau menggunakan kode dalamscript ini tanpa izin dari ") +
-  chalk.bold.green("edosetiawan.eth") +
-  chalk.redBright(" Segala bentuk duplikasi tanpa izin akan dianggap sebagai pelanggaran hak cipta")
-);
-console.log(chalk.greenBright("================================================================================================"));
-console.log(chalk.bold.green("        ✅ PENGGUNAAN RESMI ✅        "));
-console.log(chalk.greenBright("================================================================================================"));
-console.log(
-  chalk.yellowBright(
-    "Script ini hanya boleh digunakan oleh pemilik resmi yang telah diberikan akses. Jika Anda bukan pengguna resmi, segera hubungi "
-  ) +
-  chalk.bold.red("edosetiawan.eth") +
-  chalk.yellowBright(" untuk validasi.")
-);
