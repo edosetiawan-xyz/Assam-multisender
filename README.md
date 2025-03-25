@@ -292,16 +292,8 @@ atau `bisa langsung beli dibawah ini`
 2. Klik `/Start`
 3. Bot akan menampilkan informasi akun kamu, termasuk `chat ID`
 
-4 Contoh tampilan notifikasi ditelegram:
-
-🚀 **Mengirim 1 BTC ke** `0x3fdd28107e635037da0bc4d797797983e321715c`  
-• felicia (`547/100000` edosetiawan.eth  
-✅ **Transaksi dikirim:**  
-`0xcc31d869f43598217d365af6d65499f66fe290a46eabb527f32c8f56703d53ff`  
-⏱️ **Estimasi waktu:** 1 detik  
-⛽ **Gas Price:** 253.069869581 Gwei  
-⏰ **Waktu transaksi:** 25 February 2025 20:30:19  
-🔍 **Explorer:** [txhash](https://assam.tea.xyz/tx/0xcc31d869f43598217d365af6d65499f66fe290a46eabb527f32c8f56703d53ff)
+4 Contoh tampilan notifikasi di Telegram:  
+![Dataset Structure](https://raw.githubusercontent.com/edosetiawan-xyz/Kontolodon-airdrop/273c36e2c4b36dbf209ce8a6ea71f29c3446ae3e/dataset_structure.jpg)
 
 ![Cara Penggunaan](https://img.shields.io/badge/Cara%20Penggunaan-34A853?style=for-the-badge&logo=readthedocs&logoColor=white)
 
