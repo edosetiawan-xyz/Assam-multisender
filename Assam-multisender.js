@@ -1301,7 +1301,7 @@ async function cancelNonce() {
 
   try {
     console.log(gradients.rainbowGradient("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
-    console.log(gradients.rainbowGradient("║                              CANCEL NONCE - ASSAM TESTNET                                   ║"))
+    console.log(gradients.rainbowGradient("║                             CANCEL NONCE - ASSAM TESTNET                                   ║"))
     console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════════════════════════════════════════════╝"))
     console.log(getRandomGradient()("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
     console.log(getRandomGradient()("║                            AUTHOR : edosetiawan.eth                                        ║"))
@@ -1510,7 +1510,7 @@ async function checkTokenBalances() {
 
   try {
     console.log(gradients.rainbowGradient("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
-    console.log(gradients.rainbowGradient("║                                 CEK SALDO - ASSAM TESTNET                                   ║"))
+    console.log(gradients.rainbowGradient("║                                CEK SALDO - ASSAM TESTNET                                   ║"))
     console.log(gradients.rainbowGradient("╚════════════════════════════════════════════════════════════════════════════════════════════╝"))
     console.log(getRandomGradient()("\n╔════════════════════════════════════════════════════════════════════════════════════════════╗"))
     console.log(getRandomGradient()("║                            AUTHOR : edosetiawan.eth                                        ║"))
