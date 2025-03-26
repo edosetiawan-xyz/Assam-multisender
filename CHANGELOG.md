@@ -468,9 +468,9 @@ RPC_URL=https://assam-rpc.tea.xyz/ tambahkan (koma) jika lebih dari 1 RPC
 PRIVATE_KEYS=your_private_key_1,your_private_key_2
 
 # Token Contracts
-BTC_CONTRACT=0x1234567890abcdef1234567890abcdef12345678
-MTT_CONTRACT=0xabcdef1234567890abcdef1234567890abcdef12
-TDI_CONTRACT=0x7890abcdef1234567890abcdef1234567890abcd
+BTC_CONTRACT=0xC4341CB2C976306AE9169efb3d8301ea287a3128
+MTT_CONTRACT=0x19dab75B9D703f5a7e176CD08d5A29676aaB94fc
+TDI_CONTRACT=0xb2dD47ea3db0D4FEf8a29727F9E4e21fa47E5102
 
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
